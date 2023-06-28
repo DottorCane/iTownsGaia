@@ -131,6 +131,7 @@ describe('Provide in Sources', function () {
 
         updateLayeredMaterialNodeImagery(context, colorlayer, tile, tile.parent);
         updateLayeredMaterialNodeImagery(context, colorlayer, tile, tile.parent);
+        console.log('context.scheduler.execute');
         DataSourceProvider.executeCommand(context.scheduler.commands[0]).then((textures) => {
             assert.equal(textures[0].extent.zoom, zoom);
             assert.equal(textures[0].extent.row, 511);
@@ -159,6 +160,7 @@ describe('Provide in Sources', function () {
 
         updateLayeredMaterialNodeElevation(context, elevationlayer, tile, tile.parent);
         updateLayeredMaterialNodeElevation(context, elevationlayer, tile, tile.parent);
+        console.log('context.scheduler.execute');
         DataSourceProvider.executeCommand(context.scheduler.commands[0]).then((textures) => {
             assert.equal(textures[0].extent.zoom, zoom);
             assert.equal(textures[0].extent.row, 511);
@@ -188,6 +190,7 @@ describe('Provide in Sources', function () {
 
         updateLayeredMaterialNodeImagery(context, colorlayer, tile, tile.parent);
         updateLayeredMaterialNodeImagery(context, colorlayer, tile, tile.parent);
+        console.log('context.scheduler.execute');
         DataSourceProvider.executeCommand(context.scheduler.commands[0]).then((textures) => {
             const e = textures[0].extent.as(tile.extent.crs);
             assert.equal(e.zoom, zoom);
@@ -205,6 +208,7 @@ describe('Provide in Sources', function () {
         tile.parent = { };
 
         planarlayer.subdivideNode(context, tile);
+TileProvider.executeCommand
         TileProvider.executeCommand(context.scheduler.commands[0]).then((tiles) => {
             assert.equal(tiles.length, 4);
             assert.equal(tiles[0].extent.west, tile.extent.east * 0.5);
@@ -225,6 +229,7 @@ describe('Provide in Sources', function () {
         featureLayer.source.onLayerAdded({ out: featureLayer });
 
         featureLayer.update(context, featureLayer, tile);
+        console.log('DataSourceProvider.executeCommand');
         DataSourceProvider.executeCommand(context.scheduler.commands[0]).then((features) => {
             assert.equal(features[0].meshes.children.length, 4);
             done();
@@ -246,6 +251,7 @@ describe('Provide in Sources', function () {
         featureLayer.source._featuresCaches = {};
         featureLayer.source.onLayerAdded({ out: featureLayer });
         featureLayer.update(context, featureLayer, tile);
+        console.log('DataSourceProvider.executeCommand');
         DataSourceProvider.executeCommand(context.scheduler.commands[0]).then((features) => {
             assert.ok(features[0].meshes.children[0].isMesh);
             assert.ok(features[0].meshes.children[1].isPoints);
@@ -287,6 +293,7 @@ describe('Provide in Sources', function () {
         colorlayerWfs.source.onLayerAdded({ out: colorlayerWfs });
         updateLayeredMaterialNodeImagery(context, colorlayerWfs, tile, tile.parent);
         updateLayeredMaterialNodeImagery(context, colorlayerWfs, tile, tile.parent);
+        console.log('DataSourceProvider.executeCommand');
         DataSourceProvider.executeCommand(context.scheduler.commands[0]).then((textures) => {
             assert.equal(textures.length, 1);
             assert.ok(textures[0].isTexture);
@@ -315,6 +322,7 @@ describe('Provide in Sources', function () {
 
         updateLayeredMaterialNodeImagery(context, colorlayer, tile, tile.parent);
         updateLayeredMaterialNodeImagery(context, colorlayer, tile, tile.parent);
+        console.log('DataSourceProvider.executeCommand');
         DataSourceProvider.executeCommand(context.scheduler.commands[0]).then((result) => {
             tile.material.setSequence([colorlayer.id]);
             tile.material.getLayer(colorlayer.id).setTextures(result, [new THREE.Vector4()]);

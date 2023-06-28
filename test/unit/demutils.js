@@ -40,6 +40,7 @@ describe('DemUtils', function () {
         scheduler: {
             execute: (command) => {
                 const provider = viewer.mainLoop.scheduler.getProtocolProvider(command.layer.protocol);
+                console.log('provider.executeCommand');
                 return provider.executeCommand(command);
             },
         },

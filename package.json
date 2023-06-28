@@ -1,7 +1,7 @@
 {
   "name": "itowns",
-  "version": "2.38.2",
-  "description": "A JS/WebGL framework for 3D geospatial data visualization",
+  "version": "2.38.2.1",
+  "description": "iTowns framework and custom code for Gaia server",
   "main": "lib/Main.js",
   "exports": {
     ".": "./lib/Main.js",
@@ -67,7 +67,7 @@
   },
   "peerDependencies": {
     "proj4": "^2.8.0",
-    "three": "0.146.0"
+    "three": "0.140.2"
   },
   "devDependencies": {
     "@babel/cli": "^7.17.10",
@@ -106,7 +106,7 @@
     "puppeteer": "^14.1.1",
     "q": "^1.5.1",
     "replace-in-file": "^6.3.2",
-    "three": "0.146.0",
+    "three": "0.140.2",
     "url-polyfill": "^1.1.12",
     "webpack": "^5.72.1",
     "webpack-cli": "^4.9.2",

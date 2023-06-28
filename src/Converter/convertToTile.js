@@ -50,6 +50,7 @@ export default {
         };
 
         return newTileGeometry(builder, paramsGeometry).then((result) => {
+            // console.log(`convert, ${layer.attachedLayers}`);
             // build tile mesh
             result.geometry._count++;
             const crsCount = layer.tileMatrixSets.length;

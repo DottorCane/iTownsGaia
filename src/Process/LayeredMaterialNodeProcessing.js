@@ -140,7 +140,7 @@ export function updateLayeredMaterialNodeImagery(context, layer, node, parent) {
     const extentsSource = extentsDestination.map(e => e.tiledExtentParent(targetLevel));
     node.layerUpdateState[layer.id].newTry();
     const command = buildCommand(context.view, layer, extentsSource, extentsDestination, node);
-
+    // console.log('context.scheduler.execute');
     return context.scheduler.execute(command).then(
         (result) => {
             // Does nothing if the layer has been removed while command was being or waiting to be executed
@@ -214,6 +214,7 @@ export function updateLayeredMaterialNodeElevation(context, layer, node, parent)
     node.layerUpdateState[layer.id].newTry();
     const command = buildCommand(context.view, layer, extentsSource, extentsDestination, node);
 
+    // console.log('context.scheduler.execute');
     return context.scheduler.execute(command).then(
         (result) => {
             // Does nothing if the layer has been removed while command was being or waiting to be executed

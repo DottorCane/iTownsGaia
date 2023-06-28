@@ -83,6 +83,7 @@ module.exports = {
         'function-paren-newline': 'off',
         'operator-linebreak': 'off',
         'object-curly-newline': 'off',
+        'prefer-template': 'off',
         curly: ['error', 'all'],
         'no-multiple-empty-lines': 'off',
         'no-restricted-globals': 'off',

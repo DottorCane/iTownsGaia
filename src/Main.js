@@ -37,6 +37,10 @@ export { getMaxColorSamplerUnitsCount, colorLayerEffects } from 'Renderer/Layere
 export { default as Capabilities } from 'Core/System/Capabilities';
 export { CAMERA_TYPE } from 'Renderer/Camera';
 
+// Gaia Extension
+
+
+
 // Internal itowns format
 export { default as Feature, FeatureCollection, FeatureGeometry, FEATURE_TYPES } from 'Core/Feature';
 export { default as Style } from 'Core/Style';
@@ -50,9 +54,15 @@ export { default as ColorLayer } from 'Layer/ColorLayer';
 export { default as ElevationLayer } from 'Layer/ElevationLayer';
 export { default as GeometryLayer } from 'Layer/GeometryLayer';
 export { default as FeatureGeometryLayer } from 'Layer/FeatureGeometryLayer';
+export { default as GaiaGeometryLayer } from 'Layer/GaiaGeometryLayer';
 export { default as PointCloudLayer } from 'Layer/PointCloudLayer';
 export { default as PotreeLayer } from 'Layer/PotreeLayer';
+
+// export { default as Gaia3DLayer } from 'Layer/Gaia3DLayer';
+
 export { default as C3DTilesLayer } from 'Layer/C3DTilesLayer';
+export { default as Tiles3DLayer } from 'Layer/Tiles3DLayer';
+
 export { default as TiledGeometryLayer } from 'Layer/TiledGeometryLayer';
 export { default as OrientedImageLayer } from 'Layer/OrientedImageLayer';
 export { STRATEGY_MIN_NETWORK_TRAFFIC, STRATEGY_GROUP, STRATEGY_PROGRESSIVE, STRATEGY_DICHOTOMY } from 'Layer/LayerUpdateStrategy';
@@ -69,13 +79,19 @@ export { default as GeoidLayer } from 'Layer/GeoidLayer';
 export { default as Source } from 'Source/Source';
 export { default as FileSource } from 'Source/FileSource';
 export { default as TMSSource } from 'Source/TMSSource';
+// export { default as Tiles3DSource } from 'Source/Tiles3DSource';
 export { default as WFSSource } from 'Source/WFSSource';
 export { default as WMSSource } from 'Source/WMSSource';
 export { default as WMTSSource } from 'Source/WMTSSource';
 export { default as VectorTilesSource } from 'Source/VectorTilesSource';
 export { default as OrientedImageSource } from 'Source/OrientedImageSource';
 export { default as PotreeSource } from 'Source/PotreeSource';
+
+// export { default as Gaia3DSource } from 'Source/Gaia3DSource';
+// export { default as VectorGaiaTilesSource } from 'Source/VectorGaiaTilesSource';
+
 export { default as C3DTilesSource } from 'Source/C3DTilesSource';
+export { default as Gaia3DPointSource } from 'Source/Gaia3DPointSource';
 export { default as EntwinePointTileSource } from 'Source/EntwinePointTileSource';
 
 // Parsers provided by default in iTowns

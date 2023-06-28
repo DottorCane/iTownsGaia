@@ -86,7 +86,13 @@ class TMSSource extends Source {
 
         super(source);
 
-        this.isTMSSource = true;
+        // this.isTMSSource = true;
+        if (source.isTMSSource !== undefined) {
+            this.isTMSSource = source.isTMSSource;
+        } else {
+            this.isTMSSource = true;
+        }
+        // this.isTMSSource = source.isTMSSource || true;
 
         if (!source.extent) {
             // default to the global extent
@@ -97,7 +103,11 @@ class TMSSource extends Source {
 
         this.isInverted = source.isInverted || false;
         this.url = source.url;
-        this.crs = CRS.formatToTms(source.crs);
+        if (this.isTMSSource) {
+            this.crs = CRS.formatToTms(source.crs);
+        } else {
+            this.crs = source.crs;
+        }
         this.tileMatrixSetLimits = source.tileMatrixSetLimits;
         this.extentSetlimits = {};
         this.tileMatrixCallback = source.tileMatrixCallback || (zoomLevel => zoomLevel);

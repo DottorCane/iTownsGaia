@@ -5,6 +5,13 @@ import GDFParser from 'Parser/GDFParser';
 import GpxParser from 'Parser/GpxParser';
 import GTXParser from 'Parser/GTXParser';
 import ISGParser from 'Parser/ISGParser';
+
+// import GaiaPointParser from 'Parser/GaiaPointParser';
+// import GaiaPointBinaryParser from 'Parser/GaiaPointBinaryParser';
+// import Gaia3DParser from 'Parser/Gaia3DParser';
+import Gaia3DParserJSON from 'Parser/Gaia3DParserJSON';
+import Gaia3DParserBinary from 'Parser/Gaia3DParserBinary';
+
 import VectorTileParser from 'Parser/VectorTileParser';
 import Fetcher from 'Provider/Fetcher';
 import Cache from 'Core/Scheduler/Cache';
@@ -19,6 +26,8 @@ export const supportedFetchers = new Map([
     ['application/gtx', Fetcher.arrayBuffer],
     ['application/isg', Fetcher.text],
     ['application/gdf', Fetcher.text],
+    ['gaiaJSON', Fetcher.json],
+    ['gaiaBinary', Fetcher.arrayBuffer],
 ]);
 
 export const supportedParsers = new Map([
@@ -30,6 +39,8 @@ export const supportedParsers = new Map([
     ['application/gtx', GTXParser.parse],
     ['application/isg', ISGParser.parse],
     ['application/gdf', GDFParser.parse],
+    ['gaiaJSON', Gaia3DParserJSON.parse],
+    ['gaiaBinary', Gaia3DParserBinary.parse],
 ]);
 
 const noCache = { getByArray: () => {}, setByArray: a => a, clear: () => {} };
@@ -180,12 +191,14 @@ class Source extends InformationsData {
      * @return     {FeatureCollection|Texture}  The parsed data.
      */
     loadData(extent, out) {
+        // console.log('loadData ' + out.id);
         const cache = this._featuresCaches[out.crs];
         const key = this.requestToKey(extent);
         // try to get parsed data from cache
         let features = cache.getByArray(key);
         if (!features) {
             // otherwise fetch/parse the data
+            // console.log(`Cache not found fetchSourceData, ${out.id}`);
             features = cache.setByArray(fetchSourceData(this, extent).then(file => this.parser(file, { out, in: this }),
                 err => this.handlingError(err)), key);
             /* istanbul ignore next */

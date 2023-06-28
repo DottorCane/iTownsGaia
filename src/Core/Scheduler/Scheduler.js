@@ -80,6 +80,7 @@ function _instanciateQueue() {
         execute(cmd, provider) {
             this.counters.pending--;
             this.counters.executing++;
+
             return provider.executeCommand(cmd).then((result) => {
                 this.counters.executing--;
                 cmd.resolve(result);
@@ -133,7 +134,7 @@ Scheduler.prototype.runCommand = function runCommand(command, queue, executingCo
     if (!provider) {
         throw new Error(`No known provider for layer ${command.layer.id}`);
     }
-
+    // console.log(`Cache not found runCommand, ${command.layer.id}`);
     queue.execute(command, provider, executingCounterUpToDate).then(() => {
         // notify view that one command ended.
         command.view.notifyChange(command.requester, command.redraw);

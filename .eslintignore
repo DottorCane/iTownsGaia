@@ -1,6 +1,7 @@
 examples/libs/
 examples/layers/
 src/ThreeExtended/
+src/
 test/hooks.js
 dist/
 node_modules/
