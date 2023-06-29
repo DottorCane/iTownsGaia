@@ -14,22 +14,34 @@ import Feature2Mesh from 'Converter/Feature2Mesh';
  */
 class GaiaGeometryLayer extends GeometryLayer {
 
-    constructor(id, options = {}) {
-        options.update = GaiaPoint3DProcessing.update;
-        options.cacheLifeTime= 1000;
-        super(id, options.object3d || new Group(), options);
+    constructor(id, config = {}) {
+        config.update = GaiaPoint3DProcessing.update;
+        config.cacheLifeTime= 1000;
+        super(id, config.object3d || new Group(), config);
         // this.cache.listTile = options.cacheLifeTime;
         this.isGaiaGeometryLayer = true;
         this.accurate = true;
         this.buildExtent = !this.accurate;
-        this.material = options.material || {};
+        this.bboxes = {};
+        this.bboxes.visible=true;
+
+        // default config
+        this.octreeDepthLimit = config.octreeDepthLimit || -1;
+        this.pointBudget = config.pointBudget || 4000000;
+        this.pointSize = config.pointSize === 0 || !isNaN(config.pointSize) ? config.pointSize : 4;
+        this.sseThreshold = config.sseThreshold || 2;
+
+        this.minIntensityRange = config.minIntensityRange || 0;
+        this.maxIntensityRange = config.maxIntensityRange || 1;
+
+        this.material = config.material || {};
         if (!this.material.isMaterial) {
-            options.material = options.material || {};
-            options.material.intensityRange = new THREE.Vector2(this.minIntensityRange, this.maxIntensityRange);
-            this.material = new PointsMaterial(options.material);
+            config.material = config.material || {};
+            config.material.intensityRange = new THREE.Vector2(this.minIntensityRange, this.maxIntensityRange);
+            this.material = new PointsMaterial(config.material);
         }
         this.material.defines = this.material.defines || {};
-        this.mode = options.mode || MODE.COLOR;
+        this.mode = config.mode || MODE.COLOR;
     }
 
     // Verifico se considerata la camera, la tile3D è visibile
@@ -166,7 +178,7 @@ class GaiaGeometryLayer extends GeometryLayer {
             }
         }
 
-        this.pointBudget = 1000 * 1000 * 4;
+        // this.pointBudget = 1000 * 1000 * 4;
         var numElementShow = numElement;
 
         var allTile = true;
