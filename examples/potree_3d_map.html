@@ -58,7 +58,7 @@
             view = new itowns.GlobeView(viewerDiv, placement, { handleCollision: false });
             setupLoadingScreen(viewerDiv, view);
 
-            view.controls.minDistance = 50;
+            view.controls.minDistance = 10;
 
             // Configure Point Cloud layer
             potreeLayer = new itowns.PotreeLayer('eglise_saint_blaise_arles', {
@@ -83,6 +83,7 @@
 
             itowns.View.prototype.addLayer.call(view, potreeLayer).then(onLayerReady);
 
+            /*
             itowns.Fetcher.json('./layers/JSONLayers/IGN_MNT_HIGHRES.json').then(function _(config) {
                 config.source = new itowns.WMTSSource(config.source);
                 var layer = new itowns.ElevationLayer(config.id, config);
@@ -93,6 +94,7 @@
                 var layer = new itowns.ColorLayer(config.id, config);
                 view.addLayer(layer);
             });
+            */
         </script>
     </body>
 </html>

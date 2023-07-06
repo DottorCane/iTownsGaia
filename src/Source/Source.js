@@ -191,7 +191,7 @@ class Source extends InformationsData {
      * @return     {FeatureCollection|Texture}  The parsed data.
      */
     loadData(extent, out) {
-        // console.log('loadData ' + out.id);
+        //console.log('loadData ' + extent);
         const cache = this._featuresCaches[out.crs];
         const key = this.requestToKey(extent);
         // try to get parsed data from cache

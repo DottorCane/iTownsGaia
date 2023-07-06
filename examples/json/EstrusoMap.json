@@ -1,0 +1,37 @@
+{
+	"name": "GaiaEstruso",
+    "version": 8,
+	"center": [0.0, 0.0],
+	"zoom": 0,
+	"pitch": 0,
+	"glyphs": "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+    "sprite": "https://wxs.ign.fr/static/vectorTiles/styles/PLAN.IGN/sprite/PlanIgn",
+	"fog": {},
+	"visibility": "public",
+	"version": 8,
+	"layers": [{
+		"id": "milano_buildings_84_extrude",
+		"type": "fill",
+		"maxzoom": 0,
+		"minzoom": 0,
+		"paint": {
+			"fill-color": "rgba(0, 0, 0, 0)",
+			"fill-outline-color": "rgba(0, 0, 0, 0)"
+		},
+		"source": "Estruso",
+		"source-layer": "milano_buildings_84_extrude"
+	}],
+	"sources": {
+		"Estruso": {
+			"type": "vector",
+			"tiles": ["http://127.0.0.1:6080/gaia/rest/services/Estruso/MapServer/tile3d/{z}/{x}/{y}"],
+			"schema": "xyz"
+		}
+	},
+	"created": "",
+	"owner": "gaia",
+	"id": "GaiaEstruso",
+	"draft": false,
+	"modified": "",
+	"protected": false
+}

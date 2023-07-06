@@ -25,11 +25,12 @@ class GaiaGeometryLayer extends GeometryLayer {
         this.bboxes = {};
         this.bboxes.visible=true;
 
+
         // default config
         this.octreeDepthLimit = config.octreeDepthLimit || -1;
-        this.pointBudget = config.pointBudget || 4000000;
-        this.pointSize = config.pointSize === 0 || !isNaN(config.pointSize) ? config.pointSize : 4;
-        this.sseThreshold = config.sseThreshold || 2;
+        this.pointBudget = config.pointBudget || 5000000;
+        this.opacity = config.opacity || 1;
+        this.pointSize = config.pointSize === 0 || !isNaN(config.pointSize) ? config.pointSize : 1;
 
         this.minIntensityRange = config.minIntensityRange || 0;
         this.maxIntensityRange = config.maxIntensityRange || 1;
@@ -88,14 +89,31 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
         return false;
     }
-    preUpdate(context, sources) {
 
-        /*
-        // console.log('pre update');
-        if (sources.has(this.parent)) {
-            this.object3d.clear();
+    updateMaterial(){
+        const config = {};
+        config.size = this.pointSize;
+        config.vertexColors = true;
+        var materialNew = new THREE.PointsMaterial(config);
+        materialNew.opacity = this.opacity;
+        materialNew.transparent = true;
+        for (const tilePoint of this.object3d.children) {
+            tilePoint.material = materialNew;
+            tilePoint.material.needsUpdate = true;
         }
-        */
+    }
+
+    preUpdate(context, sources) {
+        /*
+        if (this.material) {
+            this.material.visible = this.visible;
+            this.material.opacity = this.opacity;
+            this.material.transparent = this.opacity < 1;
+            this.material.size = this.pointSize;
+            if (this.material.updateUniforms) {
+                this.material.updateUniforms();
+            }
+        }*/
 
         var camera = context.camera;
         var cameraPosition = camera.camera3D.position;
@@ -108,19 +126,43 @@ class GaiaGeometryLayer extends GeometryLayer {
         var boxCenter = new THREE.Vector3(0,0,0);
         frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(projectionMatrix, viewMatrix));
         for (const tilePoint of this.object3d.children) {
-            if (frustum.intersectsBox(tilePoint.geometry.boundingBox)) {
-                tilePoint.visible = true;
-                tilePoint.lastTimeVisible = 0;
-                tilePoint.geometry.setDrawRange(0, tilePoint.geometry.numFeature);
-                tileVisible++;
-                boxCenter = tilePoint.geometry.boundingBox.min;
-                //tilePoint.geometry.boundingBox.getCenter(boxCenter);
+            var visible = false;
+
+            var boxBoundingBox = tilePoint.geometry.boundingBox
+            var boxCenterCalc = new THREE.Vector3((boxBoundingBox.max.x+boxBoundingBox.min.x)/2,(boxBoundingBox.max.y+boxBoundingBox.min.y)/2,(boxBoundingBox.max.z+boxBoundingBox.min.z)/2);
+
+            if (tilePoint.geometry.inExtent.key==="20_392925_567563"){
+                boxCenterCalc = boxCenterCalc;
+            }
+            var distanceCalc = camera.camera3D.position.distanceTo(boxCenterCalc)
+
+            visible = context.camera.isBox3Visible(tilePoint.geometry.boundingBox, this.object3d.matrixWorld);
+
+            //Se la tile è più vicina di 100 metri la lascio sempre accesa.
+            //Per qualche motivo non chiaro alcuni box pur essendo visibili quando ci si avvicina, vengono segnalati
+            //come non visibili. Questa soglia risolve il problema, pur lasciando accese delle tile non visibili.
+            if (distanceCalc<100){
+                visible = true;
+            }
+
+            //Le tile di livello 20 sono molto pesante e quindi vanno mostrate solo a scale basse
+            if (tilePoint.zoom==20 && visible) {
+                var boxCenter = tilePoint.geometry.boundingBox.min;
                 var distance = boxCenter.distanceTo(cameraPosition);
                 tilePoint.distance = distance;
-                // tilePoint.visible = this.checkLayerVisibility(tilePoint.zoom,tilePoint.distance);
+                if (distance>250) {
+                    visible=false;
+                }
+            }
+
+            if (visible) {
+                tilePoint.visible = true;
+                tilePoint.lastTimeVisible = 0;
+                //tilePoint.geometry.setDrawRange(0, tilePoint.geometry.numFeature);
+                tileVisible++;
             }else{
                 tilePoint.visible = false;
-                tilePoint.geometry.setDrawRange(0, 0);
+                //tilePoint.geometry.setDrawRange(0, 0);
                 tileNotVisible++;
                 if (tilePoint.lastTimeVisible == 0){
                     tilePoint.lastTimeVisible = Date.now();
@@ -128,52 +170,23 @@ class GaiaGeometryLayer extends GeometryLayer {
             }
         }
 
-        var timeToDelete = 1000;
-        var timeNow = Date.now()
-        // console.log(this.object3d.children.length);
+        var timeToDelete = 10000;
+        var timeNow = Date.now();
 
         // Verifico se ci sono degli elementi da cancellare dalla memoria
         this.object3d.children = this.object3d.children.filter(function (item) {
             if ((item.visible==false) && (item.lastTimeVisible>0) && (timeNow - item.lastTimeVisible>timeToDelete)) {
-                // console.log('Delete item ' + item.id);
                 return false;
             }else{
                 return true;
             }
         });
-        // console.log(this.object3d.children.length);
 
-
-
-        // Verifico la visibilità delle tile
-        // console.log('tilesCulling');
-        /*
-        var tileVisible = 0;
-        var tileNotVisible = 0;
-        for (const tilePoint of this.object3d.children) {
-            if (tilePoint.geometry && tilePoint.geometry.boundingBox) {
-                var result = this.tilesCulling(camera, tilePoint.geometry.boundingBox, tilePoint.matrixWorld);
-                if (!result) {
-                    tileNotVisible++;
-                    tilePoint.visible = false;
-                    tilePoint.geometry.setDrawRange(0, 0);
-                } else {
-                    tileVisible++;
-                    tilePoint.visible = true;
-                    tilePoint.geometry.setDrawRange(0, tilePoint.geometry.numFeature);
-                }
-            }
-        }
-        */
-        // console.log(' TileCulling, tile visibile ' + tileVisible);
-        // console.log(' TileCulling, tile not visibile ' + tileNotVisible);
-
-        // console.log('update');
+        //Calcolo il numero massimo di elementi da visualizzare
         let numElement = 0;
         for (const pts of this.object3d.children) {
             if (pts.visible) {
                 const count = pts.geometry.attributes.position.count;
-                pts.geometry.setDrawRange(0, count);
                 numElement += count;
             }
         }
@@ -213,17 +226,7 @@ class GaiaGeometryLayer extends GeometryLayer {
                 numElementShow = 0;
                 for (const tilePoint of listTile) {
                     const count = tilePoint.geometry.numFeature;
-                    /*
-                    // Provo a mostrare solo i layer 20
-                    if (count.geometry.inExtent.zoom == 20) {
-                        tilePoint.geometry.setDrawRange(0, count);
-                        tilePoint.visible = true;
-                        limitHit = true;
-                    } else {
-                        tilePoint.visible = false;
-                        tilePoint.geometry.setDrawRange(0, 0);
-                    }
-                    */
+
                     if (tilePoint.visible && (limitHit || (numElementShow + count) > this.pointBudget)) {
                         tilePoint.visible = false;
                         tilePoint.geometry.setDrawRange(0, 0);
@@ -241,7 +244,24 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
 
 
-        this.numElement = 'Point memory: ' + numElement + ' Point show: ' + numElementShow + ' tile draw: ' + tileDraw + ' tile visible: ' + tileVisible + ' tile not visible: ' + tileNotVisible;
+        this.numElement = 'Point memory: ' + numElement + ' Point show: ' + numElementShow + ' tile total: ' + tileDraw + ' tile visible: ' + tileVisible + ' tile not visible: ' + tileNotVisible + " ";
+        /*
+        for (const tilePoint of this.object3d.children) {
+            if (!tilePoint.visible){
+                var key = tilePoint.geometry.inExtent.zoom + '_' + tilePoint.geometry.inExtent.row + '_' + tilePoint.geometry.inExtent.col;
+                //this.numElement = this.numElement + key + " ";
+            }
+        }
+        this.numElement = this.numElement + " visible: ";
+        for (const tilePoint of this.object3d.children) {
+            if (tilePoint.visible){
+                var key = tilePoint.geometry.inExtent.zoom + '_' + tilePoint.geometry.inExtent.row + '_' + tilePoint.geometry.inExtent.col;
+                //this.numElement = this.numElement + key + " ";
+            }
+        }*/
+    }
+
+    postUpdate() {
     }
 }
 

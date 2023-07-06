@@ -6,8 +6,6 @@ export default {
         layer.debugUI = datUi.addFolder(`${layer.id}`);
 
         layer.debugUI.add(layer, 'visible').name('Visible').onChange(update);
-        layer.debugUI.add(layer, 'sseThreshold').name('SSE threshold').onChange(update);
-        layer.debugUI.add(layer, 'octreeDepthLimit', -1, 20).name('Depth limit').onChange(update);
         layer.debugUI.add(layer, 'pointBudget', 1, 50000000).name('Max point count').onChange(update);
         layer.debugUI.add(layer.object3d.position, 'z', -50, 50).name('Z translation').onChange(() => {
             layer.object3d.updateMatrixWorld();
@@ -24,8 +22,16 @@ export default {
             styleUI.add(layer.material, 'mode', MODE).name('Display mode').onChange(update);
             styleUI.add(layer, 'maxIntensityRange', 0, 1).name('Intensity max').onChange(update);
         }
-        styleUI.add(layer, 'opacity', 0, 1).name('Layer Opacity').onChange(update);
-        styleUI.add(layer, 'pointSize', 0, 15).name('Point Size').onChange(update);
+        styleUI.add(layer, 'opacity', 0, 1).name('Layer Opacity').onChange(() => {
+            layer.updateMaterial();
+            view.notifyChange(layer);
+        });
+
+        styleUI.add(layer, 'pointSize', 0, 2).name('Point Size').onChange(() => {
+            layer.updateMaterial();
+            view.notifyChange(layer);
+        });
+
         if (layer.material.picking != undefined) {
             styleUI.add(layer.material, 'picking').name('Display picking id').onChange(update);
         }

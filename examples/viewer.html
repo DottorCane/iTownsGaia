@@ -1,0 +1,312 @@
+<html>
+<head>
+    <title>Itowns - Globe</title>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" type="text/css" href="css/example.css">
+    <link rel="stylesheet" type="text/css" href="css/LoadingScreen.css">
+    <link rel="stylesheet" type="text/css" href="css/widgets.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.6/dat.gui.min.js"></script>
+</head>
+<body>
+<div id="viewerDiv"></div>
+
+<!-- Import iTowns source code -->
+<script src="../dist/itowns.js"></script>
+<script src="../dist/debug.js"></script>
+<!-- Import iTowns Widgets plugin -->
+<script src="../dist/itowns_widgets.js"></script>
+<script src="js/ThreeLoader.js"></script>
+<!-- Import iTowns LoadingScreen and GuiTools plugins -->
+<script src="js/GUI/GuiTools.js"></script>
+<script src="js/GUI/LoadingScreen.js"></script>
+
+
+<script type="text/javascript">
+
+            // ---------- CREATE A GlobeView FOR SUPPORTING DATA VISUALIZATION : ----------
+
+            // Define camera initial position
+            var placement = {
+                coord: new itowns.Coordinates('EPSG:4326',9.191389,45.464167),
+                range: 1000,
+                tilt: 45,
+                heading: 0
+            }
+
+            // `viewerDiv` will contain iTowns' rendering area (`<canvas>`)
+            const viewerDiv = document.getElementById('viewerDiv');
+
+            // Create a GlobeView
+            const view = new itowns.GlobeView(viewerDiv, placement);
+
+            //Set custom control mouse + keyboards
+            const customControls = {
+                // Disable pan movement
+                PAN: {
+                    enable: false,
+                },
+                // Change the key bindings for globe rotation
+                MOVE_GLOBE: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.LEFT,
+                },
+                // Change the key bindings for orbit movement (rotation around the camera target)
+                ORBIT: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.RIGHT,
+                },
+                // Change the key bindings for dolly movement
+
+                DOLLY: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.MIDDLE,
+                },
+                // Change the key bindings for panoramic movement (rotation around the camera position)
+                PANORAMIC: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.LEFT,
+                    keyboard: 17,  // keyCode for the ctrl key
+                },
+                // Allow travel out movement when double right-clicking
+                TRAVEL_OUT: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.RIGHT,
+                    double: true,
+                },
+            }
+
+            // Modify view's control to be set as the custom controls we just defined
+            view.controls.states.setFromOptions(customControls);
+
+
+            // Define poles texture
+            view.tileLayer.noTextureColor = new itowns.THREE.Color(0x95c1e1);
+
+            // Disable atmosphere lighting
+            view.getLayerById('atmosphere').visible = false;
+            view.getLayerById('atmosphere').fog.enable = false;
+
+            // Setup loading screen and debug menu
+            setupLoadingScreen(viewerDiv, view);
+            const debugMenu = new GuiTools('menuDiv', view);
+
+
+            // ---------- DISPLAY ORTHO-IMAGES : ----------
+            /*
+            // Add one imagery layer to the scene. This layer's properties are defined in a json file, but it could be
+            // defined as a plain js object. See `Layer` documentation for more info.
+            itowns.Fetcher.json('./layers/JSONLayers/Ortho.json').then(function _(config) {
+                config.source = new itowns.WMTSSource(config.source);
+                view.addLayer(
+                    new itowns.ColorLayer('Ortho', config),
+                ).then(debugMenu.addLayerGUI.bind(debugMenu));
+            });
+            */
+
+            // Create the source
+            const tmsSource = new itowns.TMSSource({
+                format: 'image/png',
+                url: 'https://tile.openstreetmap.org/${z}/${x}/${y}.png',
+                attribution: {
+                    name: 'OpenStreetMap',
+                    url: 'http://www.openstreetmap.org/',
+                },
+                crs: 'EPSG:3857',
+            });
+
+            view.addLayer(new itowns.ColorLayer('OPENSM', { source: tmsSource }),
+                ).then(debugMenu.addLayerGUI.bind(debugMenu));
+
+
+            // ---------- DISPLAY POINT CLOUD : ----------
+            /*
+            // Configure Point Cloud layer
+            potreeLayer = new itowns.PotreeLayer('12_Left-000_LAS1_2', {
+                source: new itowns.PotreeSource({
+                    file: 'cloud.js',
+                    url: 'http://127.0.0.1:8080/examples/cloudpoints/12_Left-000_LAS1_2_1.7/',
+                    crs: view.referenceCrs,
+                }),
+            });
+
+            // add potreeLayer to scene
+            function onLayerReady() {
+                debug.PotreeDebug.initTools(view, potreeLayer, debugGui);
+
+                // update stats window
+                var info = document.getElementById('info');
+                view.addFrameRequester(itowns.MAIN_LOOP_EVENTS.AFTER_RENDER, () => {
+                    info.textContent = potreeLayer.displayedCount.toLocaleString() + ' points';
+                });
+            }
+            */
+            // ---------- DISPLAY VECTOR TILED BUILDING DATA AS 3D MESHES : ----------
+
+            // Define the source of the building data : those are vector tiled data from the geoportail.
+            const buildingsSource = new itowns.VectorTilesSource({
+                style: 'http://127.0.0.1:6080/gaia/rest/services/Building_lombardia/MapServer/maptile/map.json',
+                // We only want to display buildings related data.
+                filter: (layer) => {
+                    return layer['source-layer'].includes('buildings');
+                },
+            });
+
+            // Create a FeatureGeometryLayer to support building data.
+            var buildingsLayer = new itowns.FeatureGeometryLayer('VTBuilding',{
+                source: buildingsSource,
+                zoom: { min: 15 },
+                style: new itowns.Style({
+                    fill: {
+                        base_altitude: (p) => p.alti_sol || 0,
+                        extrusion_height: (p) => p.un_vol_av || 0,
+                        color: 'yellow'
+                    }
+                })
+            });
+
+            // Add the FeatureGeometryLayer to the scene and to the debug menu.
+            view.addLayer(buildingsLayer).then((layer) => {
+                const gui = debug.GeometryDebug.createGeometryDebugUI(debugMenu.gui, view, layer);
+                debug.GeometryDebug.addWireFrameCheckbox(gui, view, layer);
+            })
+
+
+            // ---------- DISPLAY A DIGITAL ELEVATION MODEL : ----------
+
+            // Add two elevation layers, each with a different level of detail. Here again, each layer's properties are
+            // defined in a json file.
+            function addElevationLayerFromConfig(config) {
+                config.source = new itowns.WMTSSource(config.source);
+                view.addLayer(
+                    new itowns.ElevationLayer(config.id, config),
+                ).then(debugMenu.addLayerGUI.bind(debugMenu));
+            }
+            //itowns.Fetcher.json('./layers/JSONLayers/WORLD_DTM.json').then(addElevationLayerFromConfig);
+            //itowns.Fetcher.json('./layers/JSONLayers/IGN_MNT_HIGHRES.json').then(addElevationLayerFromConfig);
+
+
+            // ---------- ADD SOME WIDGETS : ----------
+
+            // ADD A SCALE :
+            const scale = new itowns_widgets.Scale(view, { position: 'bottom-right', translate: { x: -80 } });
+
+            // ADD A MINIMAP :
+            const minimap = new itowns_widgets.Minimap(
+                view,
+                new itowns.ColorLayer('minimap', {
+                    source: new itowns.VectorTilesSource({
+                        style: 'https://wxs.ign.fr/essentiels/static/vectorTiles/styles/PLAN.IGN/gris.json',
+                        // We don't display mountains and plot related data to ease visualisation
+                        filter: (layer) => !layer['source-layer'].includes('oro_')
+                            && !layer['source-layer'].includes('parcellaire'),
+                    }),
+                    addLabelLayer: true,
+                }),
+                { cursor: '+' },
+            );
+
+            // ADD NAVIGATION TOOLS :
+            const navigation = new itowns_widgets.Navigation(view, {
+                position: 'bottom-right',
+                translate: { y: -40 },
+            });
+
+            // ADD A SEARCH BAR :
+
+            // You can find more precise explanation on searchbar options in the doc
+            // (http://www.itowns-project.org/itowns/docs/#api/Widgets/Searchbar) and in the searchbar example
+            // (https://www.itowns-project.org/itowns/examples/#widgets_searchbar)
+
+            // Define options for geocoding service that should be used by the searchbar.
+            const geocodingOptions = {
+                url: new URL(
+                    'https://wxs.ign.fr/ayxvok72rcocdyn8xyvy32og/ols/apis/completion?text=&type=StreetAddress,' +
+                    'PositionOfInterest',
+                ),
+                parser: (response) => {
+                    const map = new Map();
+                    response.results.forEach(location => {
+                        map.set(location.fulltext, new itowns.Coordinates('EPSG:4326', location.x, location.y));
+                    });
+                    return map;
+                },
+                onSelected: (coordinates) => {
+                    view.controls.lookAtCoordinate({ coord: coordinates, range: 20000, tilt: 45, heading: 0 });
+                },
+            }
+
+            // Create the searchbar
+            const searchbar = new itowns_widgets.Searchbar(view, geocodingOptions, {
+                maxSuggestionNumber: 15,
+                placeholder: 'Search a location in France',
+                position: 'top-right',
+            });
+
+
+
+            // ---------- DISPLAY ATMOSPHERIC LIGHTING : ----------
+
+            const atmosphere = view.getLayerById('atmosphere');
+            atmosphere.setRealisticOn(!view.isDebugMode);
+
+            // ---------- DEBUG TOOLS : ----------
+
+            // Toggle atmospheric lighting on/off.
+            const cRL = debugMenu.addGUI('RealisticLighting', !view.isDebugMode, function (v) {
+                atmosphere.setRealisticOn(v);
+                view.notifyChange(atmosphere);
+            });
+
+            debug.createTileDebugUI(debugMenu.gui, view);
+
+
+            //var promiseCollada = ThreeLoader.load('GLTF', './models/horse/scene.gltf')
+
+            function loadModel(urlModel,type,X,Y,Z,scala,rotX,rotY,rotZ) {
+                var promiseCollada = ThreeLoader.load(type, urlModel)
+                    .then(collada => {
+                    var model = collada.scene;
+
+                    var coord = new itowns.Coordinates('EPSG:4326',X,Y,Z);
+                    var colladaID = view.mainLoop.gfxEngine.getUniqueThreejsLayer();
+
+                    model.position.copy(coord.as(view.referenceCrs));
+                    // align up vector with geodesic normal
+                    model.lookAt(model.position.clone().add(coord.geodesicNormal));
+                    // user rotate
+                    model.rotateX(Math.PI * rotX);
+                    model.rotateY(Math.PI * rotY);
+                    model.rotateZ(Math.PI * rotZ);
+                    model.scale.set(scala, scala, scala);
+
+                    // set camera's layer to do not disturb the picking
+                    model.traverse(function _(obj) { obj.layers.set(colladaID); });
+                    view.camera.camera3D.layers.enable(colladaID);
+
+                    // update coordinate of the mesh
+                    model.updateMatrixWorld();
+
+                    view.scene.add(model);
+                    view.notifyChange();
+
+                });
+            }
+
+            var ambLight = new itowns.THREE.AmbientLight(0xffffff, 0.5);
+            view.scene.add( ambLight );
+
+            //loadModel('./models/angrybirds/scene.gltf','GLTF',9.189633230543686,45.46422771839159,10,10,0.5,0.5,0);
+            //loadModel('./models/lego_batman/scene.gltf','GLTF',9.202798520701371,45.446395146436416,20,1,0.5,1,0);
+            //loadModel('./models/f-35/scene.gltf','GLTF',9.189633230543686,45.46422771839159,30,10,0.5,1,0);
+            //loadModel('./models/star_trek_odyssey_class/scene.gltf','GLTF',9.192633230543686,45.46422771839159,100,0.2,0.5,0.5,0);
+
+            //loadModel('./models/star_trek-sovereign_class/scene.gltf','GLTF',9.189633230543686,45.46422771839159,100,0.2,0.5,0.5,0);
+            //loadModel('./models/star_trek_prometheus/scene.gltf','GLTF',9.194633230543686,45.46422771839159,100,10,0.5,0.5,0);
+
+        </script>
+</body>
+</html>

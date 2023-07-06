@@ -3,7 +3,6 @@ import Fetcher from 'Provider/Fetcher';
 import TMSSource from 'Source/TMSSource';
 import URLBuilder from 'Provider/URLBuilder';
 import Extent, { globalExtentTMS } from 'Core/Geographic/Extent';
-// import GaiaPointParser from 'Parser/GaiaPointParser';
 import CRS from 'Core/Geographic/Crs';
 import Gaia3DParserJSON from 'Parser/Gaia3DParserJSON';
 import Gaia3DParserBinary from 'Parser/Gaia3DParserBinary';
@@ -19,10 +18,8 @@ class Gaia3DPointSource extends TMSSource {
        this.isTMSSource = source.isTMSSource;
        this.url = source.url;
        this.offset = source.offset;
-       // this.fetcher = Fetcher.json;
        this.fetcher = Fetcher.arrayBuffer;
        this.parse = Gaia3DParserBinary.parse;
-
     }
 
     /*
@@ -59,6 +56,23 @@ class Gaia3DPointSource extends TMSSource {
                 (this.extentSetlimits[extent.crs] == undefined || this.extentSetlimits[extent.crs][zoom].intersectsExtent(extent));
     }
     */
+    /*
+    urlFromExtent(extent) {
+        //Tengo traccia di tutte le tile richieste e della data di richiesta
+        var key = extent.zoom + '_' + extent.row + '_' + extent.col;
+        this.cacheTile[key]=Date.now();
+        //console.log(extent);
+        return URLBuilder.xyz(extent, this);
+    }
+    */
+    /*
+    loadData(extent, out) {
+        console.log(extent);
+        var key = extent.zoom + '_' + extent.row + '_' + extent.col;
+        //this.cacheTile[key]=Date.now();
+        return super.loadData(extent, out);
+    }*/
+
 }
 
 export default Gaia3DPointSource;

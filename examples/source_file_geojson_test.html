@@ -1,0 +1,198 @@
+<html>
+    <head>
+        <title>Itowns - Globe + Multipolygon Geojson</title>
+        <meta charset="UTF-8">
+        <link rel="stylesheet" type="text/css" href="css/example.css">
+        <link rel="stylesheet" type="text/css" href="css/LoadingScreen.css">
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.6/dat.gui.min.js"></script>
+    </head>
+    <body>
+        <div id="viewerDiv" class="viewer"></div>
+        <script src="js/GUI/GuiTools.js"></script>
+        <script src="../dist/itowns.js"></script>
+        <script src="../dist/debug.js"></script>
+        <script type="text/javascript">
+            // Define initial camera position
+
+            var placementMilano = {
+                coord: new itowns.Coordinates('EPSG:4326', 9.183129038179212,45.50056284978416),
+                range: 25000,
+            }
+
+            const placement = {
+                coord: new itowns.Coordinates('EPSG:4326', 9, 45),
+                tilt: 0,
+                heading: 0,
+                range: 100000
+            };
+
+            const placementSN = {
+                coord: new itowns.Coordinates('EPSG:4326', 14.857246759482884, 41.054918176776766),
+                tilt: 0,
+                heading: 0,
+                range: 10000
+            };
+
+            const placementOrigine = {
+                coord: new itowns.Coordinates('EPSG:4326', 9, 45),
+                tilt: 22,
+                heading: 45,
+                range: 2840
+            };
+
+            // `viewerDiv` will contain iTowns' rendering area (`<canvas>`)
+            var viewerDiv = document.getElementById('viewerDiv');
+
+            // Instanciate iTowns GlobeView*
+            var view = new itowns.GlobeView(viewerDiv, placementSN);
+            var menuGlobe = new GuiTools('menuDiv', view);
+            view.controls.minDistance = 0;
+
+            //Set custom control mouse + keyboards
+            const customControls = {
+                // Disable pan movement
+                PAN: {
+                    enable: false,
+                },
+                // Change the key bindings for globe rotation
+                MOVE_GLOBE: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.LEFT,
+                },
+                // Change the key bindings for orbit movement (rotation around the camera target)
+                ORBIT: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.RIGHT,
+                },
+                // Change the key bindings for dolly movement
+
+                DOLLY: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.MIDDLE,
+                },
+                // Change the key bindings for panoramic movement (rotation around the camera position)
+                PANORAMIC: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.LEFT,
+                    keyboard: 17,  // keyCode for the ctrl key
+                },
+                // Allow travel out movement when double right-clicking
+                TRAVEL_OUT: {
+                    enable: true,
+                    mouseButton: itowns.THREE.MOUSE.RIGHT,
+                    double: true,
+                },
+            }
+
+            // Modify view's control to be set as the custom controls we just defined
+            view.controls.states.setFromOptions(customControls);
+
+            // Lights
+            var dirLight = new itowns.THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(-0.9, 0.3, 1);
+            dirLight.updateMatrixWorld();
+            view.scene.add( dirLight );
+
+            var ambLight = new itowns.THREE.AmbientLight(0xffffff, 0.2);
+            view.scene.add( ambLight );
+
+            // ---------- DISPLAY A DIGITAL ELEVATION MODEL : ----------
+
+            // Add two elevation layers, each with a different level of detail. Here again, each layer's properties are
+            // defined in a json file.
+            function addElevationLayerFromConfig(config) {
+                config.source = new itowns.WMTSSource(config.source);
+                view.addLayer(new itowns.ElevationLayer(config.id, config));
+            }
+            itowns.Fetcher.json('./layers/JSONLayers/WORLD_DTM.json').then(addElevationLayerFromConfig);
+            //itowns.Fetcher.json('./layers/JSONLayers/IGN_MNT_HIGHRES.json').then(addElevationLayerFromConfig);
+
+            // Create the source
+            const tmsSource = new itowns.TMSSource({
+                format: 'image/png',
+                url: 'https://tile.openstreetmap.org/${z}/${x}/${y}.png',
+                zoom: { min: 0, max:19 },
+                attribution: {
+                    name: 'OpenStreetMap',
+                    url: 'http://www.openstreetmap.org/',
+                },
+                crs: 'EPSG:3857',
+            });
+
+           var OPENSM = new itowns.ColorLayer('OPENSM',{ source: tmsSource });
+           view.addLayer(OPENSM).then((layer) => {
+                const gui = debug.GeometryDebug.createGeometryDebugUI(menuGlobe.gui, view, layer);
+                //debug.GeometryDebug.addWireFrameCheckbox(gui, view, layer);
+            })
+
+
+
+            const cloudPoint = new itowns.Tiles3DSourceGaia({
+                format: 'application/json',
+                urlNO: 'http://127.0.0.1:6080/gaia/rest/services/Left-000_LAS1_2/MapServer/tile3d/${z}/${x}/${y}',
+                url: 'http://127.0.0.1:6080/gaia/rest/services/Record(6)_Right-000_LAS1_2/MapServer/tile3d/${z}/${x}/${y}.json',
+                urlNO2: 'http://127.0.0.1:6080/gaia/rest/services/Left-000_LAS1_2/MapServer/tile3d/${z}/${x}/${y}.json',
+                crs: 'EPSG:3857',
+                isTMSSource: false,
+                zoom: { min: 1, max:19 },
+            });
+
+            var pointReal = new itowns.FeatureGeometryLayer('Gaia Point', {
+                // Use a FileSource to load a single file once
+                source: cloudPoint,
+                transparent: false,
+                opacity: 0.7,
+                style: new itowns.Style({
+                    point: { color: 'red',radius:2 }
+                })
+            });
+
+
+            view.addLayer(pointReal).then((layer) => {
+                const gui = debug.GeometryDebug.createGeometryDebugUI(menuGlobe.gui, view, layer);
+                debug.GeometryDebug.addWireFrameCheckbox(gui, view, layer);
+            });
+
+
+
+
+            // ---------- DISPLAY VECTOR TILED BUILDING DATA AS 3D MESHES : ----------
+            /*
+            // Define the source of the building data : those are vector tiled data from the geoportail.
+            const buildingsSource2 = new itowns.VectorTilesSource({
+                style: 'https://wxs.ign.fr/essentiels/static/vectorTiles/styles/PLAN.IGN/standard.json',
+                // We only want to display buildings related data.
+                filter: (layer) => {
+                    return layer['source-layer'].includes('bati_surf')
+                        && layer.paint["fill-color"];
+                },
+            });
+
+            // Create a FeatureGeometryLayer to support building data.
+            var buildingsLayer2 = new itowns.FeatureGeometryLayer('VTBuilding',{
+                source: buildingsSource2,
+                zoom: { min: 15 },
+                accurate: false,
+                style: new itowns.Style({
+                    fill: {
+                        base_altitude: (p) => p.alti_sol || 0,
+                        extrusion_height: (p) => p.hauteur || 0,
+                    }
+                })
+            });
+
+            // Add the FeatureGeometryLayer to the scene and to the debug menu.
+            view.addLayer(buildingsLayer2).then((layer) => {
+                const gui = debug.GeometryDebug.createGeometryDebugUI(menuGlobe.gui, view, layer);
+                debug.GeometryDebug.addWireFrameCheckbox(gui, view, layer);
+            })
+            */
+
+        </script>
+    </body>
+</html>
+
+
+

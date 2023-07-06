@@ -77,26 +77,23 @@ export default {
 
             featureMeshes.forEach((geometry) => {
                 if (geometry) {
-                    // TODO: Qui inserisco la creazione dell'elemento partendo dal buffer di punti
                     const config = {};
-                    config.size = 1;
+                    config.size = layer.pointSize;
                     config.vertexColors = true;
 
+                    var key = geometry.inExtent.zoom + '_' + geometry.inExtent.row + '_' + geometry.inExtent.col;
+                    geometry.inExtent.key = key;
 
-                    if (geometry.inExtent.zoom > 16) {
-                        config.size = 1.5;
-                    } else if (geometry.inExtent.zoom > 18) {
-                        config.size = 2;
-                    } else if (geometry.inExtent.zoom > 19) {
-                        config.size = 3;
+                    //Cerco che l'elemento con questa chiave. Se è già presente nel layer non lo inserisco ancora
+                    for (const tilePoint of layer.object3d.children) {
+                        if (tilePoint.geometry.inExtent.key === key ){
+                            return;
+                        }
                     }
 
-
-
-                    // var material = new PointsMaterial(config);
-                    // material = new THREE.PointsMaterial({ size: 0.5, vertexColors: true });
-                    // material = new THREE.PointsMaterial({ color: 0x888888 });
                     var material = new THREE.PointsMaterial(config);
+                    material.opacity = this.pointSize;
+                    material.transparent = true;
                     // const material = new THREE.PointsMaterial({ color: 0x000000 });
                     const points = new THREE.Points(geometry, material);
                     points.zoom = geometry.inExtent.zoom;
@@ -120,88 +117,15 @@ export default {
                     // points.tightbbox = geometry.boundingBox.applyMatrix4(points.matrix);
                     points.layers.set(layer.threejsLayer);
                     points.layer = layer;
-                    // points.extent = Extent.fromBox3(command.view.referenceCrs, node.bbox);
-                    // points.userData.node = node;
-
-                    // layer.object3d.add(points);
-                    // node.link.push(points);
 
                     if (!node.parent) {
                         // TODO: Clean cache needs a refactory, because it isn't really efficient and used
                          points.visible = false;
                          ObjectRemovalHelper.removeChildrenAndCleanupRecursively(layer, points);
-                         // console.log('Remove element ' + points);
                     } else {
-
-                        /*
-                        // Cerco il padre della tile e la segno da rimuovere
-                        var rowFather = Math.floor(geometry.inExtent.row / 2);
-                        var colFather = Math.floor(geometry.inExtent.col / 2);
-                        var zoomFather = geometry.inExtent.zoom - 1;
-
-
-
-                       for (var k = 0; k < layer.object3d.children.length; k++) {
-                            const tilePoint = layer.object3d.children[k];
-                            if ((tilePoint.geometry.inExtent.row === rowFather) && (tilePoint.geometry.inExtent.col === colFather) && (tilePoint.geometry.inExtent.zoom === zoomFather)) {
-                                 tilePoint.visible = false;
-                                 tilePoint.geometry.setDrawRange(0, 0);
-                                 ObjectRemovalHelper.removeChildrenAndCleanupRecursively(layer, tilePoint);
-                                // console.log('Remove element ' + tilePoint);
-                            }
-                        }
-                        */
-
-                        /*
-                        // Provo a calcolare il budget quanto carico una tile
-                        const listTile = layer.object3d.children.filter(obj => obj.geometry.inExtent !== undefined);
-                        listTile.sort((a, b) => a.geometry.inExtent.zoom - b.geometry.inExtent.zoom);
-                        // this.group.children.sort((p1, p2) => p2.userData.node.sse - p1.userData.node.sse);
-                        this.pointBudget = 1000 * 1000 * 1.5;
-                        let limitHit = false;
-                        let numElementShow = 0;
-                        let numElementTotal = 0;
-                        for (const tilePoint of listTile) {
-                            const count = tilePoint.geometry.numFeature;
-                            numElementTotal += count;
-                            if (limitHit || (numElementShow + count) > this.pointBudget) {
-                                tilePoint.visible = false;
-                                tilePoint.geometry.setDrawRange(0, 0);
-                                limitHit = true;
-                            } else {
-                                tilePoint.geometry.setDrawRange(0, count);
-                                numElementShow += count;
-                            }
-                        }
-
-
-                        // layer.numElement = 'Point memory ' + numElementTotal + ' Point show ' + numElementShow + ' tile ' + layer.object3d.children.length;
-                        */
-                        // console.log(numElement);
                         layer.object3d.add(points);
-                        // layer.numElement = 'Point memory ' + numElement + ' Point show ' + numElementShow + ' tile ' + layer.object3d.children.length;
                         node.link.push(points);
                     }
-
-
-                    /*
-                    featureMesh.as(context.view.referenceCrs);
-                    featureMesh.meshes.position.z = geoidLayerIsVisible(layer.parent) ? node.geoidHeight : 0;
-                    featureMesh.updateMatrixWorld();
-
-                    if (layer.onMeshCreated) {
-                        layer.onMeshCreated(featureMesh, context);
-                    }
-
-                    if (!node.parent) {
-                        // TODO: Clean cache needs a refactory, because it isn't really efficient and used
-                        ObjectRemovalHelper.removeChildrenAndCleanupRecursively(layer, featureMesh);
-                    } else {
-                        layer.object3d.add(featureMesh);
-                        node.link.push(featureMesh);
-                    }
-                    featureMesh.layer = layer;
-                    */
                 } else {
                     // TODO: verify if it's possible the featureMesh is undefined.
                     node.layerUpdateState[layer.id].failure(1, true);

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import Coordinates from 'Core/Geographic/Coordinates';
 
 export default {
 
@@ -27,11 +28,18 @@ export default {
         }
 
         // Ogni double occupa 8 byte
-        //const min = new THREE.Vector3(view.getFloat64(0).toFixed(2), view.getFloat64(8).toFixed(2), view.getFloat64(16).toFixed(2));
-        //const max = new THREE.Vector3(view.getFloat64(24).toFixed(2), view.getFloat64(32).toFixed(2), view.getFloat64(40).toFixed(2));
-        const min = new THREE.Vector3(view.getFloat64(0), view.getFloat64(8), view.getFloat64(16));
-        const max = new THREE.Vector3(view.getFloat64(24), view.getFloat64(32), view.getFloat64(40));
+        var coordsMin = new Coordinates('EPSG:4326', view.getFloat64(0), view.getFloat64(8), view.getFloat64(16));
+        var coordsMinPrj = coordsMin.as('EPSG:4978');
+        var coordsMax = new Coordinates('EPSG:4326', view.getFloat64(24), view.getFloat64(32), view.getFloat64(40));
+        var coordsMaxPrj = coordsMax.as('EPSG:4978');
+        const min = new THREE.Vector3(coordsMinPrj.x,coordsMinPrj.y,coordsMinPrj.z);
+        const max = new THREE.Vector3(coordsMaxPrj.x,coordsMaxPrj.y,coordsMaxPrj.z);
+
         const box = new THREE.Box3(min, max);
+        box.zoom = buffer.extent.zoom;
+        box.col = buffer.extent.col;
+        box.row = buffer.extent.row;
+        box.extent = buffer.extent;
 
         const xMin = view.getFloat64(0);
         const yMin = view.getFloat64(8);
@@ -57,24 +65,22 @@ export default {
         //var numFeatureBuffer = bufferFeature / ((3 * 4) + (3 * 1));
         var numFeatureBuffer = bufferFeature / ((3 * 2) + (3 * 1));
         var numFeature = 0;
+
         for (var index = 0; index < numFeatureBuffer; index++) {
             const valueX = view.getUint16(offset);offset += 2;
             const valueY = view.getUint16(offset);offset += 2;
             const valueZ = view.getUint16(offset);offset += 2;
-            coordinates.push((valueX * xDelta) + offsetX);
-            coordinates.push((valueY * yDelta) + offsetY);
-            coordinates.push((valueZ * zDelta) + offsetZ);
-            /*
-            const floatValueX = view.getFloat64(offset);offset += 8;
-            const floatValueY = view.getFloat64(offset);offset += 8;
-            const floatValueZ = view.getFloat64(offset);offset += 8;
-            coordinates.push(floatValueX + offsetX);
-            coordinates.push(floatValueY + offsetY);
-            coordinates.push(floatValueZ + offsetZ);
-            */
-            //coordinatesInt.push(parseInt(floatValueX + offsetX));
-            //coordinatesInt.push(parseInt(floatValueY + offsetY));
-            //coordinatesInt.push(parseInt(floatValueZ + offsetZ));
+
+            var X =    (valueX * xDelta) + offsetX + xMin;
+            var Y =    (valueY * yDelta) + offsetY + yMin;
+            var Z =    (valueZ * zDelta) + offsetZ + zMin;
+
+            var coords = new Coordinates('EPSG:4326', X, Y, Z);
+            var coordsPrj = coords.as('EPSG:4978');
+
+            coordinates.push((coordsPrj.x-coordsMinPrj.x));
+            coordinates.push((coordsPrj.y-coordsMinPrj.y));
+            coordinates.push((coordsPrj.z-coordsMinPrj.z));
 
             const colorR = view.getInt8(offset);offset += 1;
             const colorG = view.getInt8(offset);offset += 1;
@@ -84,83 +90,18 @@ export default {
             color.push(colorB);
             numFeature++;
         }
-        //console.log(delta + " Zoom: " + buffer.extent.zoom);
         if (coordinates.length == 0) {
             return Promise.resolve(null);
         }
         const positionsTypedArray = new Float32Array(coordinates);
-        //const positionsTypedArrayInt = new Float32Array(coordinatesInt);
         const colorTypedArray = new Uint8Array(color);
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(positionsTypedArray, 3));
-        //geometry.setAttribute('position', new THREE.BufferAttribute(positionsTypedArrayInt, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colorTypedArray, 3, true));
         geometry.boundingBox = box;
         geometry.inExtent = buffer.extent;
         geometry.numFeature = numFeature;
-        // console.log(numFeature);
         return Promise.resolve(geometry);
-
-
-        /*
-        if (json.features === undefined || json.features.length === 0) {
-            return Promise.resolve(null);
-        }
-
-        // options = deprecatedParsingOptionsToNewOne(options);
-        options.in = options.in || {};
-
-        const out = options.out;
-        const _in = options.in;
-        // var crsIn = _in.crs || readCRS(json);
-
-        // Format: MinX,MinY,MinZ,MaxX,MaxY,MaxZ,X1,Y1,Z1,[...],XN,YN,ZN,R1,G1,B1,A1,[...],RN,GN,BN,AN
-        // const view = new DataView(buffer, 0, 6 * 4);
-        // Per il momento definisco la Z in modo statico, poi si vedrà
-
-        const min = new THREE.Vector3(json.bbox[0], json.bbox[1], 4167299);
-        const max = new THREE.Vector3(json.bbox[2], json.bbox[3], 4167421);
-        const box = new THREE.Box3(min, max);
-
-        const positions = [];
-        const color = [];
-        var featureRead = null;
-
-        for (let i = 0; i < json.features.length; i++) {
-          // Genera coordinate casuali per ogni punto
-          featureRead = json.features[i];
-          var attribute = featureRead.properties;
-
-          if (featureRead.geometry.type === 'MultiPoint') {
-            for (var k = 0; k < featureRead.geometry.coordinates.length; k++) {
-                 positions.push(featureRead.geometry.coordinates[k][0]);
-                 positions.push(featureRead.geometry.coordinates[k][1]);
-                 positions.push(featureRead.geometry.coordinates[k][2]);
-                 // positions.push(featureRead.geometry.coordinates[k]);
-                 // coordinates.push(featureRead.geometry.coordinates[k]);
-            }
-            color.push(attribute.r, attribute.g, attribute.b);
-          } else {
-            // Allora ho un punto singolo
-            positions.push(featureRead.geometry.coordinates[0]);
-            positions.push(featureRead.geometry.coordinates[1]);
-            positions.push(featureRead.geometry.coordinates[2]);
-            color.push(attribute.r, attribute.g, attribute.b);
-          }
-        }
-        if (positions.length == 0) {
-            return Promise.resolve(null);
-        }
-        const positionsTypedArray = new Float32Array(positions);
-        const colorTypedArray = new Uint8Array(color);
-
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(positionsTypedArray, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colorTypedArray, 3, true));
-        geometry.boundingBox = box;
-
-        return Promise.resolve(geometry);
-        */
     },
 };

@@ -82,19 +82,42 @@
             const scale = new itowns_widgets.Scale(view, { position: 'bottom-right', translate: { x: -80 } });
 
             // ADD A MINIMAP :
+
+
+            var itemSourceMiniMap = new itowns.WMSSource({
+                version: '1.3.0',
+                name: 'MinimapService',
+                style: '',
+                url: 'http://portal.eositaly.it/gaia/rest/services/limiti_amministrativi_it/WMS',
+                crs: 'EPSG:3857',
+                extent: {
+                    west: '-20037508',
+                    east: '20037508',
+                    south: '-20037508',
+                    north: '20037508',
+                },
+                format: 'image/png',
+                transparent: true
+            });
+            /*
+            const itemLayerMiniMap = new itowns.ColorLayer('Minimap', {
+                source: itemSourceMiniMap,
+            });
+            */
+
+            let itemSourceVector = new itowns.VectorTilesSource({
+                style: 'http://portal.gaiatest.it:6080/gaia/rest/services/Bordi/MapServer/maptile/map.json'
+            });
+
+            const itemLayerMiniMap = new itowns.ColorLayer('Minimap', {
+                source: itemSourceVector,
+            });
+
             const minimap = new itowns_widgets.Minimap(
                 view,
-                new itowns.ColorLayer('minimap', {
-                    source: new itowns.VectorTilesSource({
-                        style: 'https://wxs.ign.fr/essentiels/static/vectorTiles/styles/PLAN.IGN/gris.json',
-                        // We don't display mountains and plot related data to ease visualisation
-                        filter: (layer) => !layer['source-layer'].includes('oro_')
-                            && !layer['source-layer'].includes('parcellaire'),
-                    }),
-                    addLabelLayer: true,
-                }),
+                itemLayerMiniMap,
                 { cursor: '+' },
-            );
+            )
 
             // ADD NAVIGATION TOOLS :
             const navigation = new itowns_widgets.Navigation(view, {
