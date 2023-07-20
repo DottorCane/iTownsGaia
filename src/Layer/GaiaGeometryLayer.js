@@ -5,6 +5,7 @@ import FeatureProcessing from 'Process/FeatureProcessing';
 import GaiaPoint3DProcessing from 'Process/GaiaPoint3DProcessing';
 import PointsMaterial, { MODE } from 'Renderer/PointsMaterial';
 import Feature2Mesh from 'Converter/Feature2Mesh';
+import Extent from 'Core/Geographic/Extent';
 
 /**
  *
@@ -21,14 +22,27 @@ class GaiaGeometryLayer extends GeometryLayer {
         // this.cache.listTile = options.cacheLifeTime;
         this.isGaiaGeometryLayer = true;
         this.accurate = true;
-        this.buildExtent = !this.accurate;
+        //this.buildExtent = !this.accurate;
         this.bboxes = {};
         this.bboxes.visible=true;
+
+        if (config.offset){
+            if (config.offset.x===undefined){
+                config.offset.x = 0;
+            }
+            if (config.offset.y===undefined){
+                config.offset.y = 0;
+            }
+            if (config.offset.z===undefined){
+                config.offset.z = 0;
+            }
+            this.offset = new THREE.Vector3(config.offset.x, config.offset.y, config.offset.z);
+        }
 
 
         // default config
         this.octreeDepthLimit = config.octreeDepthLimit || -1;
-        this.pointBudget = config.pointBudget || 5000000;
+        this.pointBudget = config.pointBudget || 2000000;
         this.opacity = config.opacity || 1;
         this.pointSize = config.pointSize === 0 || !isNaN(config.pointSize) ? config.pointSize : 1;
 
@@ -45,6 +59,60 @@ class GaiaGeometryLayer extends GeometryLayer {
         this.mode = config.mode || MODE.COLOR;
     }
 
+    createPointsElement(geometry){
+        if (!geometry){
+            return;
+        }
+        const config = {};
+        config.size = this.pointSize;
+        config.vertexColors = true;
+
+        var key = geometry.inExtent.zoom + '_' + geometry.inExtent.row + '_' + geometry.inExtent.col;
+        geometry.inExtent.key = key;
+
+        //Cerco che l'elemento con questa chiave. Se è già presente nel layer non lo inserisco più volte
+        for (const tilePoint of this.object3d.children) {
+            if (tilePoint.geometry.inExtent.key === key ){
+                return;
+            }
+        }
+
+        var material = new THREE.PointsMaterial(config);
+        if (this.opacity<1){
+            material.opacity = this.opacity;
+            material.transparent = true;
+        }
+        // const material = new THREE.PointsMaterial({ color: 0x000000 });
+        const points = new THREE.Points(geometry, material);
+        points.zoom = geometry.inExtent.zoom;
+        points.lastTimeVisible = 0;
+
+        var pointFinal;
+        if (this.offset){
+            pointFinal = points.geometry.boundingBox.min.clone().add(this.offset);
+        }else{
+            pointFinal = points.geometry.boundingBox.min.clone()
+        }
+
+        points.position.copy(pointFinal);
+
+
+        var scaleVector = new THREE.Vector3(1, 1, 1);
+        points.scale.copy(scaleVector);
+        points.updateMatrixWorld();
+
+        // addPickingAttribute(points);
+        points.frustumCulled = false;
+        points.matrixAutoUpdate = false;
+
+        points.updateMatrix();
+        // points.tightbbox = geometry.boundingBox.applyMatrix4(points.matrix);
+        points.layers.set(this.threejsLayer);
+        points.layer = this;
+        return points;
+        //this.object3d.add(points);
+        //this.object3d.updateMatrixWorld();
+    }
     // Verifico se considerata la camera, la tile3D è visibile
     tilesCulling(camera, box3D, tileMatrixWorld) {
         if (box3D && camera.isBox3Visible(box3D, tileMatrixWorld)) {
@@ -52,42 +120,34 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
         return false;
     }
+    calcKeyExtent(inExtent){
+        var key = inExtent.zoom + '_' + inExtent.row + '_' + inExtent.col;
+        return key;
+    }
     // In base allo Zoom c'è una distanza minima che rende il layer visibile
-    checkLayerVisibility(zoom,distance){
-        if (zoom == 20 ){
-            if (distance < 700){
-                return true;
+    checkTileVisibility(zoom,distance){
+        if (zoom == 21 ){
+            if (distance > 150){
+                return false;
+            }
+        }else if (zoom == 20 ){
+            if (distance > 350){
+                return false;
             }
         }else if (zoom == 19 ) {
-            if (distance > 500 && distance < 850){
-                return true;
+            if (distance > 500){
+                return false;
             }
         }else if (zoom == 18 ) {
-            if (distance > 500 && distance < 1000){
-                return true;
+            if (distance>  7500){
+                return false;
             }
         }else if (zoom == 17 ) {
-            if (distance > 850 && distance < 2500){
-                return true;
-            }
-        }else if (zoom == 16 ) {
-            if (distance > 1000 && distance < 5000){
-                return true;
-            }
-        }else if (zoom == 15 ) {
-            if (distance > 2500 && distance < 8000){
-                return true;
-            }
-        }else if (zoom == 14 ) {
-            if (distance > 5000 && distance < 15000){
-                return true;
-            }
-        }else if (zoom == 13 ) {
-            if (distance > 8000 && distance < 30000){
-                return true;
+            if (distance > 1000){
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     updateMaterial(){
@@ -103,18 +163,30 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
     }
 
-    preUpdate(context, sources) {
-        /*
-        if (this.material) {
-            this.material.visible = this.visible;
-            this.material.opacity = this.opacity;
-            this.material.transparent = this.opacity < 1;
-            this.material.size = this.pointSize;
-            if (this.material.updateUniforms) {
-                this.material.updateUniforms();
+    requestLoadTile(extent,dictAllTile){
+        var that = this;
+        var key = this.calcKeyExtent(extent);
+        if (dictAllTile[key]){
+            return;
+        }
+        var promise = this.source.loadData(extent,this);
+        if (promise==undefined || promise == null){
+            return;
+        }
+        promise.then(
+            function(v) {
+                var points = that.createPointsElement(v);
+                if (points!=null) {
+                    that.object3d.add(points);
+                    that.object3d.updateMatrixWorld();
+                }
+            },
+            function(e) {
+                //Error
             }
-        }*/
-
+        );
+    }
+    preUpdate(context, sources) {
         var camera = context.camera;
         var cameraPosition = camera.camera3D.position;
         var projectionMatrix = camera.camera3D.projectionMatrix;
@@ -125,15 +197,16 @@ class GaiaGeometryLayer extends GeometryLayer {
         var tileDraw = 0;
         var boxCenter = new THREE.Vector3(0,0,0);
         frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(projectionMatrix, viewMatrix));
+        var dictTileSearchZoom = [];
+        var dictAllTile = {}
         for (const tilePoint of this.object3d.children) {
+            //traccio tutte le tile che sono lette in un dizionario
+            dictAllTile[tilePoint.geometry.inExtent.key] = true;
             var visible = false;
 
             var boxBoundingBox = tilePoint.geometry.boundingBox
             var boxCenterCalc = new THREE.Vector3((boxBoundingBox.max.x+boxBoundingBox.min.x)/2,(boxBoundingBox.max.y+boxBoundingBox.min.y)/2,(boxBoundingBox.max.z+boxBoundingBox.min.z)/2);
 
-            if (tilePoint.geometry.inExtent.key==="20_392925_567563"){
-                boxCenterCalc = boxCenterCalc;
-            }
             var distanceCalc = camera.camera3D.position.distanceTo(boxCenterCalc)
 
             visible = context.camera.isBox3Visible(tilePoint.geometry.boundingBox, this.object3d.matrixWorld);
@@ -142,18 +215,28 @@ class GaiaGeometryLayer extends GeometryLayer {
             //Per qualche motivo non chiaro alcuni box pur essendo visibili quando ci si avvicina, vengono segnalati
             //come non visibili. Questa soglia risolve il problema, pur lasciando accese delle tile non visibili.
             if (distanceCalc<100){
+                //console.log(distanceCalc);
                 visible = true;
+                //Salvo gli extent con scala 20 per vedere se quelle di livello 21 sono già caricate oppure se vanno recuperate
+                if (tilePoint.zoom==20){
+                    dictTileSearchZoom.push(tilePoint.geometry.inExtent)
+                }
             }
 
+            if (visible){
+                visible = this.checkTileVisibility(tilePoint.zoom,distanceCalc)
+            }
+            /*
             //Le tile di livello 20 sono molto pesante e quindi vanno mostrate solo a scale basse
             if (tilePoint.zoom==20 && visible) {
                 var boxCenter = tilePoint.geometry.boundingBox.min;
                 var distance = boxCenter.distanceTo(cameraPosition);
                 tilePoint.distance = distance;
+                checkTileVisibility()
                 if (distance>250) {
                     visible=false;
                 }
-            }
+            }*/
 
             if (visible) {
                 tilePoint.visible = true;
@@ -170,7 +253,7 @@ class GaiaGeometryLayer extends GeometryLayer {
             }
         }
 
-        var timeToDelete = 10000;
+        var timeToDelete = 5000;
         var timeNow = Date.now();
 
         // Verifico se ci sono degli elementi da cancellare dalla memoria
@@ -182,7 +265,21 @@ class GaiaGeometryLayer extends GeometryLayer {
             }
         });
 
-        //Calcolo il numero massimo di elementi da visualizzare
+        //Verifico se ci sono Tile di livello 21 da leggere
+        for (var i=0;i<dictTileSearchZoom.length;i++){
+            var extentTemp = dictTileSearchZoom[i];
+            //Ogni tile ha quattro figli
+            var ext1 = new Extent(extentTemp.crs, 21, (extentTemp.row*2), (extentTemp.col*2));
+            var ext2 = new Extent(extentTemp.crs, 21, (extentTemp.row*2)+1, (extentTemp.col*2));
+            var ext3 = new Extent(extentTemp.crs, 21, (extentTemp.row*2), (extentTemp.col*2)+1);
+            var ext4 = new Extent(extentTemp.crs, 21, (extentTemp.row*2)+1, (extentTemp.col*2)+1);
+            this.requestLoadTile(ext1,dictAllTile);
+            this.requestLoadTile(ext2,dictAllTile);
+            this.requestLoadTile(ext3,dictAllTile);
+            this.requestLoadTile(ext4,dictAllTile);
+        }
+
+        //Calcolo il numero massimo di punti da visualizzare per gli elementi attivi
         let numElement = 0;
         for (const pts of this.object3d.children) {
             if (pts.visible) {

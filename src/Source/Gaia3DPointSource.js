@@ -22,6 +22,8 @@ class Gaia3DPointSource extends TMSSource {
        this.parse = Gaia3DParserBinary.parse;
     }
 
+
+
     /*
     // Metodo che in base all'extent definisce l'URL da caricare.
     urlFromExtent(extent) {
@@ -72,6 +74,10 @@ class Gaia3DPointSource extends TMSSource {
         //this.cacheTile[key]=Date.now();
         return super.loadData(extent, out);
     }*/
+
+    extentInsideLimit(extent) {
+        return this.extent.intersectsExtent(extent);
+    }
 
 }
 

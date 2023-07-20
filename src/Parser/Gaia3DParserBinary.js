@@ -11,22 +11,6 @@ export default {
 
         const view = new DataView(buffer);
 
-        let offsetX = 0;
-        let offsetY = 0;
-        let offsetZ = 0;
-        //Leggo l'eventuale spostamento che viene passato al layer
-        if (options.in.offset != undefined) {
-            if (options.in.offset.x != undefined) {
-                offsetX = options.in.offset.x;
-            }
-            if (options.in.offset.y != undefined) {
-                offsetY = options.in.offset.y;
-            }
-            if (options.in.offset.z != undefined) {
-                offsetZ = options.in.offset.z;
-            }
-        }
-
         // Ogni double occupa 8 byte
         var coordsMin = new Coordinates('EPSG:4326', view.getFloat64(0), view.getFloat64(8), view.getFloat64(16));
         var coordsMinPrj = coordsMin.as('EPSG:4978');
@@ -71,9 +55,9 @@ export default {
             const valueY = view.getUint16(offset);offset += 2;
             const valueZ = view.getUint16(offset);offset += 2;
 
-            var X =    (valueX * xDelta) + offsetX + xMin;
-            var Y =    (valueY * yDelta) + offsetY + yMin;
-            var Z =    (valueZ * zDelta) + offsetZ + zMin;
+            var X =    (valueX * xDelta) + xMin;
+            var Y =    (valueY * yDelta) + yMin;
+            var Z =    (valueZ * zDelta) + zMin;
 
             var coords = new Coordinates('EPSG:4326', X, Y, Z);
             var coordsPrj = coords.as('EPSG:4978');
@@ -85,9 +69,10 @@ export default {
             const colorR = view.getInt8(offset);offset += 1;
             const colorG = view.getInt8(offset);offset += 1;
             const colorB = view.getInt8(offset);offset += 1;
+            //TODO: Non mi è chiaro perché i dati sono salvati in formato RGB ma se non vengono inseriti come RBG i colori non sono corretti
             color.push(colorR);
-            color.push(colorG);
             color.push(colorB);
+            color.push(colorG);
             numFeature++;
         }
         if (coordinates.length == 0) {

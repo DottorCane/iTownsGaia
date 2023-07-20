@@ -92,20 +92,34 @@ export default {
                     }
 
                     var material = new THREE.PointsMaterial(config);
-                    material.opacity = this.pointSize;
-                    material.transparent = true;
+                    if (this.opacity<1){
+                        material.opacity = this.opacity;
+                        material.transparent = true;
+                    }
                     // const material = new THREE.PointsMaterial({ color: 0x000000 });
                     const points = new THREE.Points(geometry, material);
                     points.zoom = geometry.inExtent.zoom;
                     points.lastTimeVisible = 0;
 
-                    points.position.copy(points.geometry.boundingBox.min);
+                    var pointFinal;
+                    if (layer.offset){
+                        pointFinal = points.geometry.boundingBox.min.clone().add(layer.offset);
+                    }else{
+                        pointFinal = points.geometry.boundingBox.min.clone()
+                    }
+
+                    points.position.copy(pointFinal);
+
+
                     var scaleVector = new THREE.Vector3(1, 1, 1);
                     points.scale.copy(scaleVector);
+                    points.updateMatrixWorld();
 
                     // addPickingAttribute(points);
                     points.frustumCulled = false;
                     points.matrixAutoUpdate = false;
+
+
                     /*
                     // Per il momento i dati arrivano con le coordinate giuste
                     if (!layer.isEntwinePointTileLayer) {
