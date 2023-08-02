@@ -21,7 +21,15 @@ function textureColorLayer(texture, layer) {
 export default {
     convert(data, extentDestination, layer) {
         let texture;
-        if (data.isFeatureCollection) {
+        //TODO:Fix serve per gestire le tile esistenti ma senza dati
+         //senza questo servizi come il RIRU vengono renderizzati male
+        if (data == null) {
+            extentDestination.as(CRS.formatToEPSG(layer.crs), extentTexture);
+            texture = {};
+            texture.extent = extentDestination;
+        }
+
+        else if (data.isFeatureCollection) {
             const backgroundLayer = layer.source.backgroundLayer;
             const backgroundColor = (backgroundLayer && backgroundLayer.paint) ?
                 new THREE.Color(backgroundLayer.paint['background-color']) :

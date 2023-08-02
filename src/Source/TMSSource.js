@@ -87,12 +87,13 @@ class TMSSource extends Source {
         super(source);
 
         // this.isTMSSource = true;
+        //TODO:FIX, imposto che il parametro dipende dal config e non è fisso
         if (source.isTMSSource !== undefined) {
             this.isTMSSource = source.isTMSSource;
         } else {
             this.isTMSSource = true;
         }
-        // this.isTMSSource = source.isTMSSource || true;
+        
 
         if (!source.extent) {
             // default to the global extent

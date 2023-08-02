@@ -6,9 +6,6 @@ import GpxParser from 'Parser/GpxParser';
 import GTXParser from 'Parser/GTXParser';
 import ISGParser from 'Parser/ISGParser';
 
-// import GaiaPointParser from 'Parser/GaiaPointParser';
-// import GaiaPointBinaryParser from 'Parser/GaiaPointBinaryParser';
-// import Gaia3DParser from 'Parser/Gaia3DParser';
 import Gaia3DParserJSON from 'Parser/Gaia3DParserJSON';
 import Gaia3DParserBinary from 'Parser/Gaia3DParserBinary';
 
@@ -16,6 +13,7 @@ import VectorTileParser from 'Parser/VectorTileParser';
 import Fetcher from 'Provider/Fetcher';
 import Cache from 'Core/Scheduler/Cache';
 
+//TODO:FIX aggiungo i formati custom
 export const supportedFetchers = new Map([
     ['image/x-bil;bits=32', Fetcher.textureFloat],
     ['geojson', Fetcher.json],
@@ -30,6 +28,7 @@ export const supportedFetchers = new Map([
     ['gaiaBinary', Fetcher.arrayBuffer],
 ]);
 
+//TODO:FIX aggiungo i formati custom
 export const supportedParsers = new Map([
     ['geojson', GeoJsonParser.parse],
     ['application/json', GeoJsonParser.parse],

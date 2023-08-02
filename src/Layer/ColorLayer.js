@@ -89,7 +89,14 @@ class ColorLayer extends RasterLayer {
         this.defineLayerProperty('opacity', 1.0);
         this.defineLayerProperty('sequence', 0);
         this.transparent = config.transparent || (this.opacity < 1.0);
-        this.noTextureParentOutsideLimit = config.source ? config.source.isFileSource : false;
+
+
+        //TODO:FIX Se è già definito non uso queste condizioni, senza questo a volte il dato viene sovrascritto
+        if (this.noTextureParentOutsideLimit===undefined){
+            this.noTextureParentOutsideLimit = config.source ? config.source.isFileSource : false;
+        }
+
+
 
         // Feature options
         this.buildExtent = true;
