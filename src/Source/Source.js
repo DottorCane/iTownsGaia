@@ -12,6 +12,7 @@ import Gaia3DParserBinary from 'Parser/Gaia3DParserBinary';
 import VectorTileParser from 'Parser/VectorTileParser';
 import Fetcher from 'Provider/Fetcher';
 import Cache from 'Core/Scheduler/Cache';
+import CRS from 'Core/Geographic/Crs';
 
 //TODO:FIX aggiungo i formati custom
 export const supportedFetchers = new Map([
@@ -60,6 +61,9 @@ class InformationsData {
         if (options.projection) {
             console.warn('Source projection parameter is deprecated, use crs instead.');
             options.crs = options.crs || options.projection;
+        }
+        if (options.crs) {
+            CRS.isValid(options.crs);
         }
         this.crs = options.crs;
     }
