@@ -94,7 +94,7 @@ class GlobeView extends View {
      * @param {Object} options.controls - See options of {@link GlobeControls}
      */
     constructor(viewerDiv, placement = {}, options = {}) {
-        THREE.Object3D.DefaultUp.set(0, 0, 1);
+        THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
         // Setup View
         super('EPSG:4978', viewerDiv, options);
         this.isGlobeView = true;
@@ -108,7 +108,7 @@ class GlobeView extends View {
         const sun = new THREE.DirectionalLight();
         sun.position.set(-0.5, 0, 1);
         sun.updateMatrixWorld(true);
-        tileLayer.object3d.add(sun);
+        this.scene.add(sun);
 
         this.addLayer(tileLayer);
         this.tileLayer = tileLayer;

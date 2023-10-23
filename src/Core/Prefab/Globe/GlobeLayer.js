@@ -69,7 +69,7 @@ class GlobeLayer extends TiledGeometryLayer {
         this.options.defaultPickingRadius = 5;
         this.minSubdivisionLevel = this.minSubdivisionLevel == undefined ? 2 : this.minSubdivisionLevel;
         this.maxSubdivisionLevel = this.maxSubdivisionLevel == undefined ? 19 : this.maxSubdivisionLevel;
-        this.maxDeltaElevation = this.maxDeltaElevation || 4.0;
+        this.maxDeltaElevationLevel = this.maxDeltaElevationLevel || 4.0;
 
         this.extent = this.schemeTile[0].clone();
 
@@ -128,10 +128,10 @@ class GlobeLayer extends TiledGeometryLayer {
             return false;
         }
 
-        return this.horizonCulling(node.horizonCullingPointElevationScaled);
+        return GlobeLayer.horizonCulling(node.horizonCullingPointElevationScaled);
     }
 
-    horizonCulling(point) {
+    static horizonCulling(point) {
         // see https://cesiumjs.org/2013/04/25/Horizon-culling/
         scaledHorizonCullingPoint.copy(point).applyMatrix4(worldToScaledEllipsoid);
         scaledHorizonCullingPoint.sub(cameraPosition);

@@ -1,4 +1,5 @@
-import { MODE } from 'Renderer/PointsMaterial';
+import { PNTS_MODE, PNTS_SHAPE, PNTS_SIZE_MODE } from 'Renderer/PointsMaterial';
+
 
 export default {
     initTools(view, layer, datUi) {
@@ -19,7 +20,7 @@ export default {
 
         var styleUI = layer.debugUI.addFolder('Styling');
         if (layer.material.mode != undefined) {
-            styleUI.add(layer.material, 'mode', MODE).name('Display mode').onChange(update);
+            styleUI.add(layer.material, 'mode', PNTS_MODE).name('Display mode').onChange(update);
             styleUI.add(layer, 'maxIntensityRange', 0, 1).name('Intensity max').onChange(update);
         }
         styleUI.add(layer, 'opacity', 0, 1).name('Layer Opacity').onChange(() => {

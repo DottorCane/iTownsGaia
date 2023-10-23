@@ -21,12 +21,10 @@ export default {
             node.layerUpdateState[layer.id] = new LayerUpdateState();
         } else if (!node.layerUpdateState[layer.id].canTryUpdate()) {
             // toggle visibility features
-            node.link.forEach((f) => {
-                if (f.layer?.id == layer.id) {
-                    f.layer.object3d.add(f);
-                    f.meshes.position.z = geoidLayerIsVisible(layer.parent) ? node.geoidHeight : 0;
-                    f.meshes.updateMatrixWorld();
-                }
+            node.link[layer.id]?.forEach((f) => {
+                f.layer.object3d.add(f);
+                f.meshes.position.z = geoidLayerIsVisible(layer.parent) ? node.geoidHeight : 0;
+                f.meshes.updateMatrixWorld();
             });
             return;
         }
@@ -36,6 +34,8 @@ export default {
         const zoomDest = extentsDestination[0].zoom;
 
         // check if it's tile level is equal to display level layer.
+        // TO DO updata at all level asked
+        // if ((zoomDest < layer.zoom.min && zoomDest > layer.zoom.max) ||
         if (zoomDest != layer.zoom.min ||
         // check if there's data in extent tile.
             !this.source.extentInsideLimit(node.extent, zoomDest) ||
@@ -52,7 +52,6 @@ export default {
             layer,
             extentsSource: extentsDestination,
             view: context.view,
-            threejsLayer: layer.threejsLayer,
             requester: node,
         };
 
@@ -61,6 +60,7 @@ export default {
 
             featureMeshes.forEach((featureMesh) => {
                 if (featureMesh) {
+                    node.link[layer.id] = node.link[layer.id] || [];
                     featureMesh.as(context.view.referenceCrs);
                     featureMesh.meshes.position.z = geoidLayerIsVisible(layer.parent) ? node.geoidHeight : 0;
                     featureMesh.updateMatrixWorld();
@@ -74,7 +74,7 @@ export default {
                         ObjectRemovalHelper.removeChildrenAndCleanupRecursively(layer, featureMesh);
                     } else {
                         layer.object3d.add(featureMesh);
-                        node.link.push(featureMesh);
+                        node.link[layer.id].push(featureMesh);
                     }
                     featureMesh.layer = layer;
                 } else {

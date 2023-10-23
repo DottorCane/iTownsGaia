@@ -93,7 +93,7 @@ class TMSSource extends Source {
         } else {
             this.isTMSSource = true;
         }
-        
+
 
         if (!source.extent) {
             // default to the global extent

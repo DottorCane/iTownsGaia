@@ -12,6 +12,7 @@ import { getMaxColorSamplerUnitsCount } from 'Renderer/LayeredMaterial';
 import Scheduler from 'Core/Scheduler/Scheduler';
 import Picking from 'Core/Picking';
 import LabelLayer from 'Layer/LabelLayer';
+import ObjectRemovalHelper from 'Process/ObjectRemovalHelper';
 
 export const VIEW_EVENTS = {
     /**
@@ -39,21 +40,6 @@ export const VIEW_EVENTS = {
  * @property {string} type  dblclick-right
  */
 
-
-const _syncGeometryLayerVisibility = function _syncGeometryLayerVisibility(layer, view) {
-    if (layer.object3d) {
-        layer.object3d.visible = layer.visible;
-    }
-
-    if (layer.threejsLayer) {
-        if (layer.visible) {
-            view.camera.camera3D.layers.enable(layer.threejsLayer);
-        } else {
-            view.camera.camera3D.layers.disable(layer.threejsLayer);
-        }
-    }
-};
-
 function _preprocessLayer(view, layer, parentLayer) {
     const source = layer.source;
     if (parentLayer && !layer.extent) {
@@ -63,14 +49,7 @@ function _preprocessLayer(view, layer, parentLayer) {
         }
     }
 
-    if (layer.isGeometryLayer) {
-        if (parentLayer) {
-            // layer.threejsLayer *must* be assigned before preprocessing,
-            // because TileProvider.preprocessDataLayer function uses it.
-            layer.threejsLayer = view.mainLoop.gfxEngine.getUniqueThreejsLayer();
-        }
-        layer.defineLayerProperty('visible', true, () => _syncGeometryLayerVisibility(layer, view));
-        _syncGeometryLayerVisibility(layer, view);
+    if (layer.isGeometryLayer && !layer.isLabelLayer) {
         // Find crs projection layer, this is projection destination
         layer.crs = view.referenceCrs;
     } else if (!layer.crs) {
@@ -90,13 +69,17 @@ function _preprocessLayer(view, layer, parentLayer) {
         }
         // Because the features are shared between layer and labelLayer.
         layer.buildExtent = true;
+        // label layer needs 3d data structure.
+        layer.structure = '3d';
         const labelLayer = new LabelLayer(`${layer.id}-label`, {
             source,
             style: layer.style,
             zoom: layer.zoom,
+            performance: layer.addLabelLayer.performance,
             crs: source.crs,
             visible: layer.visible,
             margin: 15,
+            forceClampToTerrain: layer.addLabelLayer.forceClampToTerrain,
         });
 
         layer.addEventListener('visible-property-changed', () => {
@@ -148,11 +131,6 @@ class View extends THREE.EventDispatcher {
      * var view = itowns.View('EPSG:4326', viewerDiv, { camera: { type: itowns.CAMERA_TYPE.ORTHOGRAPHIC } });
      * var customControls = itowns.THREE.OrbitControls(view.camera.camera3D, viewerDiv);
      *
-     * @example <caption><b>Enable WebGl 1.0 instead of WebGl 2.0.</b></caption>
-     * var viewerDiv = document.getElementById('viewerDiv');
-     * const extent = new Extent('EPSG:3946', 1837816.94334, 1847692.32501, 5170036.4587, 5178412.82698);
-     * var view = new itowns.View('EPSG:4326', viewerDiv, {  renderer: { isWebGL2: false } });
-     *
      * @param {string} crs - The default CRS of Three.js coordinates. Should be a cartesian CRS.
      * @param {HTMLElement} viewerDiv - Where to instanciate the Three.js scene in the DOM
      * @param {Object=} options - Optional properties.
@@ -162,7 +140,6 @@ class View extends THREE.EventDispatcher {
      * a default one will be constructed. In this case, if options.renderer is an object, it will be used to
      * configure the renderer (see {@link c3DEngine}.  If not present, a new &lt;canvas> will be created and
      * added to viewerDiv (mutually exclusive with mainLoop)
-     * @param {boolean} [options.renderer.isWebGL2=true] - enable webgl 2.0 for THREE.js.
      * @param {?Scene} [options.scene3D] - [THREE.Scene](https://threejs.org/docs/#api/en/scenes/Scene) instance to use, otherwise a default one will be constructed
      * @param {?Color} options.diffuse - [THREE.Color](https://threejs.org/docs/?q=color#api/en/math/Color) Diffuse color terrain material.
      * This color is applied to terrain if there isn't color layer on terrain extent (by example on pole).
@@ -206,7 +183,8 @@ class View extends THREE.EventDispatcher {
 
         this._frameRequesters = { };
 
-        window.addEventListener('resize', () => this.resize(), false);
+        this._resizeListener = () => this.resize();
+        window.addEventListener('resize', this._resizeListener, false);
 
         this._changeSources = new Set();
 
@@ -271,35 +249,44 @@ class View extends THREE.EventDispatcher {
      * - remove all layers
      * - remove all frame requester
      * - remove all events
+     * @param {boolean} [clearCache=false] Whether to clear all the caches or not (layers cache, style cache, tilesCache)
      */
-    dispose() {
+    dispose(clearCache = false) {
         const id = viewers.indexOf(this);
         if (id == -1) {
             console.warn('View already disposed');
             return;
         }
+
+        window.removeEventListener('resize', this._resizeListener);
+
         // controls dispose
-        if (this.controls && this.controls.dispose) {
-            this.controls.dispose();
+        if (this.controls) {
+            if (typeof this.controls.dispose === 'function') {
+                this.controls.dispose();
+            }
+            delete this.controls;
         }
         // remove alls frameRequester
         this.removeAllFrameRequesters();
         // remove alls events
         this.removeAllEvents();
-        // remove alls layers
+        // remove all layers
         const layers = this.getLayers(l => !l.isTiledGeometryLayer && !l.isAtmosphere);
         for (const layer of layers) {
-            this.removeLayer(layer.id);
+            this.removeLayer(layer.id, clearCache);
         }
         const atmospheres = this.getLayers(l => l.isAtmosphere);
         for (const atmosphere of atmospheres) {
-            this.removeLayer(atmosphere.id);
+            this.removeLayer(atmosphere.id, clearCache);
         }
         const tileLayers = this.getLayers(l => l.isTiledGeometryLayer);
         for (const tileLayer of tileLayers) {
-            this.removeLayer(tileLayer.id);
+            this.removeLayer(tileLayer.id, clearCache);
         }
         viewers.splice(id, 1);
+        // Remove remaining objects in the scene (e.g. helpers, debug, etc.)
+        this.scene.traverse(ObjectRemovalHelper.cleanup);
     }
 
     /**
@@ -378,16 +365,17 @@ class View extends THREE.EventDispatcher {
      * Removes a specific imagery layer from the current layer list. This removes layers inserted with attach().
      * @example
      * view.removeLayer('layerId');
-     * @param      {string}   layerId      The identifier
-     * @return     {boolean}
+     * @param {string} layerId The identifier
+     * @param {boolean} [clearCache=false] Whether to clear all the layer cache or not
+     * @return {boolean}
      */
-    removeLayer(layerId) {
+    removeLayer(layerId, clearCache) {
         const layer = this.getLayerById(layerId);
         if (layer) {
             const parentLayer = layer.parent;
 
             // Remove and dispose all nodes
-            layer.delete();
+            layer.delete(clearCache);
 
             // Detach layer if it's attached
             if (parentLayer && !parentLayer.detach(layer)) {
@@ -702,10 +690,9 @@ class View extends THREE.EventDispatcher {
      * the top left corner of the window) or `MouseEvent` or `TouchEvent`.
      * @param {number} [radius=0] - The picking will happen in a circle centered
      * on mouseOrEvt. This is the radius of this circle, in pixels.
-     * @param {...GeometryLayer|string|Object3D} [where] - Where to look for
-     * objects. It can be anything of {@link GeometryLayer}, IDs of layers, or
-     * `THREE.Object3D`. If no location is specified, it will query on all
-     * {@link GeometryLayer} present in this `View`.
+     * @param {GeometryLayer|string|Object3D|Array<GeometryLayer|string|Object3D>} [where] - Where to look for
+     * objects. It can be a single {@link GeometryLayer}, `THREE.Object3D`, ID of a layer or an array of one of these or
+     * of a mix of these. If no location is specified, it will query on all {@link GeometryLayer} present in this `View`.
      *
      * @return {Object[]} - An array of objects. Each element contains at least
      * an object property which is the `THREE.Object3D` under the cursor. Then
@@ -717,10 +704,15 @@ class View extends THREE.EventDispatcher {
      * view.pickObjectsAt({ x, y }, 1, 'wfsBuilding')
      * view.pickObjectsAt({ x, y }, 3, 'wfsBuilding', myLayer)
      */
-    pickObjectsAt(mouseOrEvt, radius = 0, ...where) {
+    pickObjectsAt(mouseOrEvt, radius = 0, where) {
         const sources = [];
 
-        where = where.length == 0 ? this.getLayers(l => l.isGeometryLayer) : where;
+        if (!where || where.length === 0) {
+            where = this.getLayers(l => l.isGeometryLayer);
+        }
+        if (!Array.isArray(where)) {
+            where = [where];
+        }
         where.forEach((l) => {
             if (typeof l === 'string') {
                 l = this.getLayerById(l);
@@ -838,8 +830,9 @@ class View extends THREE.EventDispatcher {
     }
 
     /**
-     * Searches for {@link Feature} in {@link ColorLayer}, under the mouse of at
-     * a specified coordinates, in this view.
+     * Searches for {@link FeatureGeometry} in {@link ColorLayer}, under the mouse or at
+     * the specified coordinates, in this view. Combining them per layer and in a Feature
+     * like format.
      *
      * @param {Object} mouseOrEvt - Mouse position in window coordinates (from
      * the top left corner of the window) or `MouseEvent` or `TouchEvent`.
@@ -849,10 +842,15 @@ class View extends THREE.EventDispatcher {
      * into. If not specified, all {@link ColorLayer} and {@link GeometryLayer}
      * layers of this view will be looked in.
      *
-     * @return {Object} - An object, with a property per layer. For example,
-     * looking for features on layers `wfsBuilding` and `wfsRoads` will give an
-     * object like `{ wfsBuilding: [...], wfsRoads: [] }`. Each property is made
-     * of an array, that can be empty or filled with found features.
+     * @return {Object} - An object, having one property per layer.
+     * For example, looking for features on layers `wfsBuilding` and `wfsRoads`
+     * will give an object like `{ wfsBuilding: [...], wfsRoads: [] }`.
+     * Each property is made of an array, that can be empty or filled with
+     * Feature like objects composed of:
+     * - the FeatureGeometry
+     * - the feature type
+     * - the style
+     * - the coordinate if the FeatureGeometry is a point
      *
      * @example
      * view.pickFeaturesAt({ x, y });
@@ -926,8 +924,12 @@ class View extends THREE.EventDispatcher {
 
                     precision = CRS.isMetricUnit(texture.features.crs) ? precisions.M : precisions.D;
 
-                    result[materialLayer.id] = result[materialLayer.id].concat(
-                        FeaturesUtils.filterFeaturesUnderCoordinate(coordinates, texture.features, precision));
+                    const featuresUnderCoor = FeaturesUtils.filterFeaturesUnderCoordinate(coordinates, texture.features, precision);
+                    featuresUnderCoor.forEach((feature) => {
+                        if (!result[materialLayer.id].find(f => f.geometry === feature.geometry)) {
+                            result[materialLayer.id].push(feature);
+                        }
+                    });
                 }
             }
         }
@@ -970,12 +972,12 @@ class View extends THREE.EventDispatcher {
     }
 
     /**
-     * Returns the world position (view's crs: referenceCrs) under view coordinates.
+     * Returns the world position on the terrain (view's crs: referenceCrs) under view coordinates.
      * This position is computed with depth buffer.
      *
      * @param      {THREE.Vector2}  mouse  position in view coordinates (in pixel), if it's null so it's view's center.
      * @param      {THREE.Vector3}  [target=THREE.Vector3()] target. the result will be copied into this Vector3. If not present a new one will be created.
-     * @return     {THREE.Vector3}  the world position in view's crs: referenceCrs.
+     * @return     {THREE.Vector3}  the world position on the terrain in view's crs: referenceCrs.
      */
 
     getPickingPositionFromDepth(mouse, target = new THREE.Vector3()) {
@@ -992,10 +994,6 @@ class View extends THREE.EventDispatcher {
         mouse = mouse || dim.clone().multiplyScalar(0.5);
         mouse.x = Math.floor(mouse.x);
         mouse.y = Math.floor(mouse.y);
-
-        // Prepare state
-        const prev = camera.layers.mask;
-        camera.layers.mask = 1 << this.tileLayer.threejsLayer;
 
         // Render/Read to buffer
         let buffer;
@@ -1040,26 +1038,25 @@ class View extends THREE.EventDispatcher {
             target.unproject(camera);
         }
 
-        camera.layers.mask = prev;
-
         if (target.length() > 10000000) { return undefined; }
 
         return target;
     }
 
     /**
-     * Returns the world {@link Coordinates} at given view coordinates.
+     * Returns the world {@link Coordinates} of the terrain at given view coordinates.
      *
-     * @param   {THREE.Vector2|event}   [mouse]     The view coordinates at which the world coordinates must be
-                                                    * returned. This parameter can also be set to a mouse event from
-                                                    * which the view coordinates will be deducted. If not specified, it
-                                                    * will be defaulted to the view's center coordinates.
-     * @param   {Coordinates}           [target]    The result will be copied into this {@link Coordinates}. If not
-                                                    * specified, a new {@link Coordinates} instance will be created.
+     * @param {THREE.Vector2|event} [mouse] The view coordinates at which the world coordinates must be returned. This
+     * parameter can also be set to a mouse event from which the view coordinates will be deducted. If not specified,
+     * it will be defaulted to the view's center coordinates.
+     * @param {Coordinates} [target] The result will be copied into this {@link Coordinates} in the coordinate reference
+     * system of the given coordinate. If not specified, a new {@link Coordinates} instance will be created (in the
+     * view referenceCrs).
      *
-     * @returns {Coordinates}   The world {@link Coordinates} at the given view coordinates.
+     * @returns {Coordinates}   The world {@link Coordinates} of the terrain at the given view coordinates in the
+     * coordinate reference system of the target or in the view referenceCrs if no target is specified.
      */
-    pickCoordinates(mouse, target = new Coordinates(this.tileLayer.extent.crs)) {
+    pickTerrainCoordinates(mouse, target = new Coordinates(this.referenceCrs)) {
         if (mouse instanceof Event) {
             this.eventToViewCoords(mouse);
         } else if (mouse && mouse.x !== undefined && mouse.y !== undefined) {
@@ -1077,6 +1074,25 @@ class View extends THREE.EventDispatcher {
         coordinates.as(target.crs, target);
 
         return target;
+    }
+
+    /**
+     * Returns the world {@link Coordinates} of the terrain at given view coordinates.
+     *
+     * @param   {THREE.Vector2|event}   [mouse]     The view coordinates at which the world coordinates must be
+                                                    * returned. This parameter can also be set to a mouse event from
+                                                    * which the view coordinates will be deducted. If not specified, it
+                                                    * will be defaulted to the view's center coordinates.
+     * @param   {Coordinates}           [target]    The result will be copied into this {@link Coordinates}. If not
+                                                    * specified, a new {@link Coordinates} instance will be created.
+     *
+     * @returns {Coordinates}   The world {@link Coordinates} of the terrain at the given view coordinates.
+     *
+     * @deprecated Use View#pickTerrainCoordinates instead.
+     */
+    pickCoordinates(mouse, target = new Coordinates(this.referenceCrs)) {
+        console.warn('Deprecated, use View#pickTerrainCoordinates instead.');
+        return this.pickTerrainCoordinates(mouse, target);
     }
 
     /**

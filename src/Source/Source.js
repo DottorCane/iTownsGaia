@@ -194,14 +194,12 @@ class Source extends InformationsData {
      * @return     {FeatureCollection|Texture}  The parsed data.
      */
     loadData(extent, out) {
-        //console.log('loadData ' + extent);
         const cache = this._featuresCaches[out.crs];
         const key = this.requestToKey(extent);
         // try to get parsed data from cache
         let features = cache.getByArray(key);
         if (!features) {
             // otherwise fetch/parse the data
-            // console.log(`Cache not found fetchSourceData, ${out.id}`);
             features = cache.setByArray(fetchSourceData(this, extent).then(file => this.parser(file, { out, in: this }),
                 err => this.handlingError(err)), key);
             /* istanbul ignore next */

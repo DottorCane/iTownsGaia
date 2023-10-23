@@ -3,6 +3,7 @@ import { STRATEGY_MIN_NETWORK_TRAFFIC } from 'Layer/LayerUpdateStrategy';
 import InfoLayer from 'Layer/InfoLayer';
 import Source from 'Source/Source';
 import Cache from 'Core/Scheduler/Cache';
+import Style from 'Core/Style';
 
 /**
  * @property {boolean} isLayer - Used to checkout whether this layer is a Layer.
@@ -18,9 +19,6 @@ import Cache from 'Core/Scheduler/Cache';
  * @property {Promise} whenReady - this promise is resolved when the layer is added and all initializations are done.
  * This promise is resolved with this layer.
  * This promise is returned by [View#addLayer]{@link View}.
- * @property {boolean} [addLabelLayer=false] - Used to tell if this layer has
- * labels to display from its data. For example, it needs to be set to `true`
- * for a layer with vector tiles. If it's `true` a new `LabelLayer` is added and attached to this `Layer`.
  * @property {object} [zoom] - This property is used only the layer is attached to [TiledGeometryLayer]{@link TiledGeometryLayer}.
  * By example,
  * The layer checks the tile zoom level to determine if the layer is visible in this tile.
@@ -54,8 +52,20 @@ class Layer extends THREE.EventDispatcher {
      * @param {Source|boolean} config.source - instantiated Source specifies data source to display.
      * if config.source is a boolean, it can only be false. if config.source is false,
      * the layer doesn't need Source (like debug Layer or procedural layer).
+     * @param {StyleOptions|Style} [config.style] - an object that contain any properties
+     * (order, zoom, fill, stroke, point, text or/and icon)
+     * and sub properties of a Style (@see {@link StyleOptions}). Or directly a {@link Style} .<br/>
+     * When entering a StyleOptions the missing style properties will be look for in the data (if any)
+     * what won't be done when you use a Style.
      * @param {number} [config.cacheLifeTime=Infinity] - set life time value in cache.
      * This value is used for [Cache]{@link Cache} expiration mechanism.
+     * @param {(boolean|Object)} [config.addLabelLayer=false] - Used to tell if this layer has
+     * labels to display from its data. For example, it needs to be set to `true`
+     * for a layer with vector tiles. If it's `true` a new `LabelLayer` is added and attached to this `Layer`.
+     * You can also configure it with [LabelLayer]{@link LabelLayer} options described below such as: `addLabelLayer: { performance: true }`.
+     * @param {boolean} [config.addLabelLayer.performance=false] - In case label layer adding, so remove labels that have no chance of being visible.
+     * Indeed, even in the best case, labels will never be displayed. By example, if there's many labels.
+     * @param {boolean} [config.addLabelLayer.forceClampToTerrain=false] - use elevation layer to clamp label on terrain.
      *
      * @example
      * // Add and create a new Layer
@@ -88,6 +98,9 @@ class Layer extends THREE.EventDispatcher {
             throw new Error(`Layer ${id} needs Source`);
         }
         super();
+        if (config.style && !(config.style instanceof Style)) {
+            config.style = new Style(config.style);
+        }
         this.isLayer = true;
 
         Object.assign(this, config);
@@ -236,9 +249,10 @@ class Layer extends THREE.EventDispatcher {
 
     /**
      * Remove and dispose all objects from layer.
+     * @param {boolean} [clearCache=false] Whether to clear the layer cache or not
      */
     // eslint-disable-next-line
-    delete() {
+    delete(clearCache) {
         console.warn('Function delete doesn\'t exist for this layer');
     }
 }

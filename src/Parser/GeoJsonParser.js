@@ -42,7 +42,7 @@ const toFeature = {
         // or list of triplet [[x1, y1, z1], [x2, y2, z2], ..., [xn, yn, zn]]
         for (const triplet of coordinates) {
             coord.setFromValues(triplet[0], triplet[1], triplet[2]);
-            geometry.pushCoordinates(coord, feature);
+            geometry.pushCoordinates(feature, coord);
         }
         geometry.updateExtent();
     },
@@ -54,11 +54,11 @@ const toFeature = {
         let sum = 0;
         first.setFromValues(coordinates[0][0], coordinates[0][1], coordinates[0][2]);
         last.copy(first);
-        for (var i = 0; i < coordinates.length; i++) {
+        for (let i = 0; i < coordinates.length; i++) {
             coord.setFromValues(coordinates[i][0], coordinates[i][1], coordinates[i][2]);
             sum += (last.x - coord.x) * (last.y + coord.y);
             last.copy(coord);
-            geometry.pushCoordinates(coord, feature);
+            geometry.pushCoordinates(feature, coord);
         }
         sum += (last.x - first.x) * (last.y + first.y);
         geometry.getLastSubGeometry().ccw = sum < 0;
@@ -141,12 +141,20 @@ function toFeatureType(jsonType) {
 
 const keyProperties = ['type', 'geometry', 'properties'];
 
+const firstCoordinates = a => (a === undefined || (Array.isArray(a) && !isNaN(a[0])) ? a : firstCoordinates(a[0]));
+
 function jsonFeatureToFeature(crsIn, json, collection) {
+    if (!json.geometry?.type) {
+        console.warn('No geometry provided');
+        return null;
+    }
+
     const jsonType = json.geometry.type.toLowerCase();
     const featureType = toFeatureType(jsonType);
     const feature = collection.requestFeatureByType(featureType);
     const coordinates = jsonType != 'point' ? json.geometry.coordinates : [json.geometry.coordinates];
     const properties = json.properties || {};
+    feature.hasRawElevationData = firstCoordinates(coordinates)?.length === 3;
 
     // copy other properties
     for (const key of Object.keys(json)) {

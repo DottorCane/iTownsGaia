@@ -9,10 +9,13 @@ import Capabilities from 'Core/System/Capabilities';
 import { unpack1K } from 'Renderer/LayeredMaterial';
 import WEBGL from 'ThreeExtended/capabilities/WebGL';
 import Label2DRenderer from 'Renderer/Label2DRenderer';
+import { deprecatedC3DEngineWebGLOptions } from 'Core/Deprecated/Undeprecator';
 
 const depthRGBA = new THREE.Vector4();
 class c3DEngine {
     constructor(rendererOrDiv, options = {}) {
+        deprecatedC3DEngineWebGLOptions(options);
+
         const NOIE = !Capabilities.isInternetExplorer();
         // pick sensible default options
         if (options.antialias === undefined) {
@@ -64,6 +67,11 @@ class c3DEngine {
             }
         }.bind(this);
 
+        /**
+         * @type {function}
+         * @param {number} w
+         * @param {number} h
+         */
         this.onWindowResize = function _(w, h) {
             this.width = w;
             this.height = h;
@@ -221,40 +229,25 @@ class c3DEngine {
     }
 
     bufferToImage(pixelBuffer, width, height) {
-        var canvas = document.createElement('canvas');
-        var ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         // size the canvas to your desired image
         canvas.width = width;
         canvas.height = height;
 
-        var imgData = ctx.getImageData(0, 0, width, height);
+        const imgData = ctx.getImageData(0, 0, width, height);
         imgData.data.set(pixelBuffer);
 
         ctx.putImageData(imgData, 0, 0);
 
         // create a new img object
-        var image = new Image();
+        const image = new Image();
 
         // set the img.src to the canvas data url
         image.src = canvas.toDataURL();
 
         return image;
-    }
-
-    getUniqueThreejsLayer() {
-        // We use three.js Object3D.layers feature to manage visibility of
-        // geometry layers; so we need an internal counter to assign a new
-        // one to each new geometry layer.
-        // Warning: only 32 ([0, 31]) different layers can exist.
-        if (this._nextThreejsLayer > 31) {
-            console.warn('Too much three.js layers. Starting from now all of them will use layerMask = 31');
-            this._nextThreejsLayer = 31;
-        }
-
-        const result = this._nextThreejsLayer++;
-
-        return result;
     }
 
     depthBufferRGBAValueToOrthoZ(depthBufferRGBA, camera) {

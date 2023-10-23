@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import GeometryLayer from 'Layer/GeometryLayer';
-import PointsMaterial, { MODE } from 'Renderer/PointsMaterial';
+import PointsMaterial, { PNTS_MODE } from 'Renderer/PointsMaterial';
 import Picking from 'Core/Picking';
 
 const point = new THREE.Vector3();
@@ -21,7 +21,6 @@ function initBoundingBox(elt, layer) {
     elt.obj.boxHelper.frustumCulled = false;
     elt.obj.boxHelper.position.copy(elt.tightbbox.min).add(box3.max);
     elt.obj.boxHelper.autoUpdateMatrix = false;
-    elt.obj.boxHelper.layers.mask = layer.bboxes.layers.mask;
     layer.bboxes.add(elt.obj.boxHelper);
     elt.obj.boxHelper.updateMatrix();
     elt.obj.boxHelper.updateMatrixWorld();
@@ -90,7 +89,7 @@ function changeIntensityRange(layer) {
  * @property {THREE.Material|PointsMaterial} [material=new PointsMaterial] - The
  * material to use to display the points of the cloud. Be default it is a new
  * `PointsMaterial`.
- * @property {number} [mode=MODE.COLOR] - The displaying mode of the points.
+ * @property {number} [mode=PNTS_MODE.COLOR] - The displaying mode of the points.
  * Values are specified in `PointsMaterial`.
  * @property {number} [minIntensityRange=0] - The minimal intensity of the
  * layer. Changing this value will affect the material, if it has the
@@ -146,7 +145,7 @@ class PointCloudLayer extends GeometryLayer {
         }
         this.material.defines = this.material.defines || {};
 
-        this.mode = config.mode || MODE.COLOR;
+        this.mode = config.mode || PNTS_MODE.COLOR;
     }
 
     preUpdate(context, changeSources) {
@@ -161,6 +160,7 @@ class PointCloudLayer extends GeometryLayer {
             this.material.opacity = this.opacity;
             this.material.transparent = this.opacity < 1;
             this.material.size = this.pointSize;
+            this.material.preSSE = context.camera.preSSE;
             if (this.material.updateUniforms) {
                 this.material.updateUniforms();
             }

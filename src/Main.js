@@ -1,5 +1,5 @@
 const conf = {
-    version: '2.38.2',
+    version: '2.41.0',
 };
 export const REVISION = conf.version;
 
@@ -19,7 +19,7 @@ export { VIEW_EVENTS } from 'Core/View';
 export { default as FeatureProcessing } from 'Process/FeatureProcessing';
 export { updateLayeredMaterialNodeImagery, updateLayeredMaterialNodeElevation } from 'Process/LayeredMaterialNodeProcessing';
 export { default as OrientedImageCamera } from 'Renderer/OrientedImageCamera';
-export { default as PointsMaterial } from 'Renderer/PointsMaterial';
+export { default as PointsMaterial, PNTS_MODE, PNTS_SHAPE, PNTS_SIZE_MODE, ClassificationScheme } from 'Renderer/PointsMaterial';
 export { default as GlobeControls } from 'Controls/GlobeControls';
 export { default as FlyControls } from 'Controls/FlyControls';
 export { default as FirstPersonControls } from 'Controls/FirstPersonControls';
@@ -37,11 +37,6 @@ export { getMaxColorSamplerUnitsCount, colorLayerEffects } from 'Renderer/Layere
 export { default as Capabilities } from 'Core/System/Capabilities';
 export { CAMERA_TYPE } from 'Renderer/Camera';
 
-//TODO:FIX componenti custom di Gaia
-export { default as GaiaGeometryLayer } from 'Layer/GaiaGeometryLayer';
-export { default as Gaia3DPointSource } from 'Source/Gaia3DPointSource';
-
-
 // Internal itowns format
 export { default as Feature, FeatureCollection, FeatureGeometry, FEATURE_TYPES } from 'Core/Feature';
 export { default as Style } from 'Core/Style';
@@ -57,8 +52,7 @@ export { default as GeometryLayer } from 'Layer/GeometryLayer';
 export { default as FeatureGeometryLayer } from 'Layer/FeatureGeometryLayer';
 export { default as PointCloudLayer } from 'Layer/PointCloudLayer';
 export { default as PotreeLayer } from 'Layer/PotreeLayer';
-export { default as C3DTilesLayer } from 'Layer/C3DTilesLayer';
-export { default as Tiles3DLayer } from 'Layer/Tiles3DLayer';
+export { default as C3DTilesLayer, C3DTILES_LAYER_EVENTS } from 'Layer/C3DTilesLayer';
 export { default as TiledGeometryLayer } from 'Layer/TiledGeometryLayer';
 export { default as OrientedImageLayer } from 'Layer/OrientedImageLayer';
 export { STRATEGY_MIN_NETWORK_TRAFFIC, STRATEGY_GROUP, STRATEGY_PROGRESSIVE, STRATEGY_DICHOTOMY } from 'Layer/LayerUpdateStrategy';
@@ -81,9 +75,13 @@ export { default as WMTSSource } from 'Source/WMTSSource';
 export { default as VectorTilesSource } from 'Source/VectorTilesSource';
 export { default as OrientedImageSource } from 'Source/OrientedImageSource';
 export { default as PotreeSource } from 'Source/PotreeSource';
-
 export { default as C3DTilesSource } from 'Source/C3DTilesSource';
+export { default as C3DTilesIonSource } from 'Source/C3DTilesIonSource';
 export { default as EntwinePointTileSource } from 'Source/EntwinePointTileSource';
+
+//TODO:FIX componenti custom di Gaia
+export { default as GaiaGeometryLayer } from 'Layer/GaiaGeometryLayer';
+export { default as Gaia3DPointSource } from 'Source/Gaia3DPointSource';
 
 // Parsers provided by default in iTowns
 // Custom parser can be implemented as wanted, as long as the main function
@@ -97,11 +95,12 @@ export { default as LASParser } from 'Parser/LASParser';
 export { default as ISGParser } from 'Parser/ISGParser';
 export { default as GDFParser } from 'Parser/GDFParser';
 export { default as GTXParser } from 'Parser/GTXParser';
-export { enableDracoLoader, glTFLoader, legacyGLTFLoader } from 'Parser/B3dmParser';
+export { enableDracoLoader, enableKtx2Loader, glTFLoader, legacyGLTFLoader } from 'Parser/B3dmParser';
 
 // 3D Tiles classes and extensions
 // Exported to allow one to implement its own 3D Tiles extension which needs to
 // know the classes it extends
+export { default as C3DTFeature } from './Core/3DTiles/C3DTFeature';
 export { default as C3DTileset } from './Core/3DTiles/C3DTileset';
 export { default as C3DTBoundingVolume } from './Core/3DTiles/C3DTBoundingVolume';
 export { default as C3DTBatchTable } from './Core/3DTiles/C3DTBatchTable';

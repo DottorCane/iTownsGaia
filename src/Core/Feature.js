@@ -139,7 +139,7 @@ export class FeatureGeometry {
      */
     pushCoordinates(feature, coordIn) {
         if (feature.isCoordinates) {
-            //console.warn('Deprecated: change in arguments order, use pushCoordinates(feature, coordIn) instead');
+            console.warn('Deprecated: change in arguments order, use pushCoordinates(feature, coordIn) instead');
             this.pushCoordinates(coordIn, feature);
             return;
         }

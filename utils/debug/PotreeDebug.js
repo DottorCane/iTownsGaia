@@ -1,4 +1,4 @@
-import { MODE } from 'Renderer/PointsMaterial';
+import { PNTS_MODE, PNTS_SHAPE, PNTS_SIZE_MODE } from 'Renderer/PointsMaterial';
 
 export default {
     initTools(view, layer, datUi) {
@@ -8,7 +8,7 @@ export default {
         layer.debugUI.add(layer, 'visible').name('Visible').onChange(update);
         layer.debugUI.add(layer, 'sseThreshold').name('SSE threshold').onChange(update);
         layer.debugUI.add(layer, 'octreeDepthLimit', -1, 20).name('Depth limit').onChange(update);
-        layer.debugUI.add(layer, 'pointBudget', 1, 50000000).name('Max point count').onChange(update);
+        layer.debugUI.add(layer, 'pointBudget', 1, 15000000).name('Max point count').onChange(update);
         layer.debugUI.add(layer.object3d.position, 'z', -50, 50).name('Z translation').onChange(() => {
             layer.object3d.updateMatrixWorld();
             view.notifyChange(layer);
@@ -19,13 +19,23 @@ export default {
         layer.dbgDisplayChildren = true;
         layer.dbgDisplayParents = true;
 
-        var styleUI = layer.debugUI.addFolder('Styling');
+        const styleUI = layer.debugUI.addFolder('Styling');
         if (layer.material.mode != undefined) {
-            styleUI.add(layer.material, 'mode', MODE).name('Display mode').onChange(update);
+            styleUI.add(layer.material, 'mode', PNTS_MODE).name('Display mode').onChange(update);
             styleUI.add(layer, 'maxIntensityRange', 0, 1).name('Intensity max').onChange(update);
+        }
+        if (layer.material.shape != undefined) {
+            styleUI.add(layer.material, 'shape', PNTS_SHAPE).name('Shape mode').onChange(update);
         }
         styleUI.add(layer, 'opacity', 0, 1).name('Layer Opacity').onChange(update);
         styleUI.add(layer, 'pointSize', 0, 15).name('Point Size').onChange(update);
+        if (layer.material.sizeMode != undefined) {
+            styleUI.add(layer.material, 'sizeMode', PNTS_SIZE_MODE).name('Point size mode').onChange(() => {
+                update();
+            });
+        }
+        styleUI.add(layer.material, 'minAttenuatedSize', 0, 15).name('Min attenuated size').onChange(update);
+        styleUI.add(layer.material, 'maxAttenuatedSize', 0, 15).name('Max attenuated size').onChange(update);
         if (layer.material.picking != undefined) {
             styleUI.add(layer.material, 'picking').name('Display picking id').onChange(update);
         }

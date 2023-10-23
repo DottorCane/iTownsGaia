@@ -50,7 +50,6 @@ export default {
         };
 
         return newTileGeometry(builder, paramsGeometry).then((result) => {
-            // console.log(`convert, ${layer.attachedLayers}`);
             // build tile mesh
             result.geometry._count++;
             const crsCount = layer.tileMatrixSets.length;
@@ -58,10 +57,6 @@ export default {
             ReferLayerProperties(material, layer);
 
             const tile = new TileMesh(result.geometry, material, layer, extent, level);
-
-            // Commented because layer.threejsLayer is undefined;
-            // Fix me: conflict with object3d added in view.scene;
-            // tile.layers.set(layer.threejsLayer);
 
             if (parent && parent.isTileMesh) {
                 // get parent extent transformation
@@ -75,8 +70,6 @@ export default {
             tile.quaternion.copy(result.quaternion);
             tile.visible = false;
             tile.updateMatrix();
-
-            tile.add(tile.obb);
 
             setTileFromTiledLayer(tile, layer);
 

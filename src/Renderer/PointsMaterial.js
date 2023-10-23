@@ -5,11 +5,21 @@ import Capabilities from 'Core/System/Capabilities';
 import ShaderUtils from 'Renderer/Shader/ShaderUtils';
 import CommonMaterial from 'Renderer/CommonMaterial';
 
-export const MODE = {
+export const PNTS_MODE = {
     COLOR: 0,
     INTENSITY: 1,
     CLASSIFICATION: 2,
     NORMAL: 3,
+};
+
+export const PNTS_SHAPE = {
+    CIRCLE: 0,
+    SQUARE: 1,
+};
+
+export const PNTS_SIZE_MODE = {
+    VALUE: 0,
+    ATTENUATED: 1,
 };
 
 const white = new THREE.Color(1.0,  1.0,  1.0);
@@ -54,11 +64,15 @@ class PointsMaterial extends THREE.RawShaderMaterial {
      * @class      PointsMaterial
      * @param      {object}  [options={}]  The options
      * @param      {number}  [options.size=0]  size point
-     * @param      {number}  [options.mode=MODE.COLOR]  display mode.
+     * @param      {number}  [options.mode=PNTS_MODE.COLOR]  display mode.
+     * @param      {number}  [options.mode=PNTS_SHAPE.CIRCLE]  rendered points shape.
      * @param      {THREE.Vector4}  [options.overlayColor=new THREE.Vector4(0, 0, 0, 0)]  overlay color.
      * @param      {THREE.Vector2}  [options.intensityRange=new THREE.Vector2(0, 1)]  intensity range.
      * @param      {boolean}  [options.applyOpacityClassication=false]  apply opacity classification on all display mode.
      * @param      {Classification}  [options.classification] -  define points classification.
+     * @param      {number}  [options.sizeMode=PNTS_SIZE_MODE.VALUE]  point cloud size mode. Only 'VALUE' or 'ATTENUATED' are possible. VALUE use constant size, ATTENUATED compute size depending on distance from point to camera.
+     * @param      {number}  [options.minAttenuatedSize=3]  minimum scale used by 'ATTENUATED' size mode
+     * @param      {number}  [options.maxAttenuatedSize=10]  maximum scale used by 'ATTENUATED' size mode
      * @property {Classification}  classification - points classification.
      *
      * @example
@@ -72,25 +86,46 @@ class PointsMaterial extends THREE.RawShaderMaterial {
         const oiMaterial = options.orientedImageMaterial;
         const classification = options.classification || ClassificationScheme.DEFAULT;
         const applyOpacityClassication = options.applyOpacityClassication == undefined ? false : options.applyOpacityClassication;
+        const size = options.size || 0;
+        const mode = options.mode || PNTS_MODE.COLOR;
+        const shape = options.shape || PNTS_SHAPE.CIRCLE;
+        const sizeMode = size === 0 ? PNTS_SIZE_MODE.ATTENUATED : (options.sizeMode || PNTS_SIZE_MODE.VALUE);
+        const minAttenuatedSize = options.minAttenuatedSize || 3;
+        const maxAttenuatedSize = options.maxAttenuatedSize || 10;
+
         delete options.orientedImageMaterial;
         delete options.intensityRange;
         delete options.classification;
         delete options.applyOpacityClassication;
+        delete options.size;
+        delete options.mode;
+        delete options.shape;
+        delete options.sizeMode;
+        delete options.minAttenuatedSize;
+        delete options.maxAttenuatedSize;
+
         super(options);
 
         this.vertexShader = PointsVS;
 
         this.scale = options.scale || 0.05 * 0.5 / Math.tan(1.0 / 2.0); // autosizing scale
 
-        CommonMaterial.setDefineMapping(this, 'MODE', MODE);
+        CommonMaterial.setDefineMapping(this, 'PNTS_MODE', PNTS_MODE);
+        CommonMaterial.setDefineMapping(this, 'PNTS_SHAPE', PNTS_SHAPE);
+        CommonMaterial.setDefineMapping(this, 'PNTS_SIZE_MODE', PNTS_SIZE_MODE);
 
-        CommonMaterial.setUniformProperty(this, 'size', options.size || 0);
-        CommonMaterial.setUniformProperty(this, 'mode', options.mode || MODE.COLOR);
+        CommonMaterial.setUniformProperty(this, 'size', size);
+        CommonMaterial.setUniformProperty(this, 'mode', mode);
+        CommonMaterial.setUniformProperty(this, 'shape', shape);
         CommonMaterial.setUniformProperty(this, 'picking', false);
         CommonMaterial.setUniformProperty(this, 'opacity', this.opacity);
         CommonMaterial.setUniformProperty(this, 'overlayColor', options.overlayColor || new THREE.Vector4(0, 0, 0, 0));
         CommonMaterial.setUniformProperty(this, 'intensityRange', intensityRange);
         CommonMaterial.setUniformProperty(this, 'applyOpacityClassication', applyOpacityClassication);
+        CommonMaterial.setUniformProperty(this, 'sizeMode', sizeMode);
+        CommonMaterial.setUniformProperty(this, 'preSSE', 1.0);
+        CommonMaterial.setUniformProperty(this, 'minAttenuatedSize', minAttenuatedSize);
+        CommonMaterial.setUniformProperty(this, 'maxAttenuatedSize', maxAttenuatedSize);
 
         // add classification texture to apply classification lut.
         const data = new Uint8Array(256 * 4);
@@ -208,6 +243,10 @@ class PointsMaterial extends THREE.RawShaderMaterial {
         this.transparent = source.transparent;
         this.size = source.size;
         this.mode = source.mode;
+        this.shape = source.shape;
+        this.sizeMode = source.sizeMode;
+        this.minAttenuatedSize = source.minAttenuatedSize;
+        this.maxAttenuatedSize = source.maxAttenuatedSize;
         this.picking = source.picking;
         this.scale = source.scale;
         this.overlayColor.copy(source.overlayColor);

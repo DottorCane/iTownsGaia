@@ -7,7 +7,7 @@ import Ellipsoid from 'Core/Math/Ellipsoid';
 import OBB from 'Renderer/OBB';
 import { VIEW_EVENTS } from 'Core/View';
 
-THREE.Object3D.DefaultUp.set(0, 0, 1);
+THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 const targetPosition = new THREE.Vector3();
 const targetCoord = new Coordinates('EPSG:4326', 0, 0, 0);
 const ellipsoid = new Ellipsoid();
@@ -337,7 +337,7 @@ class CameraRig extends THREE.Object3D {
 }
 
 export function getRig(camera) {
-    rigs[camera.uuid] = rigs[camera.uuid] || new CameraRig(camera);
+    rigs[camera.uuid] = rigs[camera.uuid] || new CameraRig();
     return rigs[camera.uuid];
 }
 

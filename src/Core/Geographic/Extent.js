@@ -37,7 +37,7 @@ let _extent;
 let _extent2;
 
 const cardinals = new Array(8);
-for (var i = cardinals.length - 1; i >= 0; i--) {
+for (let i = cardinals.length - 1; i >= 0; i--) {
     cardinals[i] = new Coordinates('EPSG:4326', 0, 0, 0, 0);
 }
 
@@ -424,12 +424,16 @@ class Extent {
      * @returns {Boolean}
      */
     intersectsExtent(extent) {
+        return Extent.intersectsExtent(this, extent);
+    }
+
+    static intersectsExtent(extentA, extentB) {
         // TODO don't work when is on limit
-        const other = extent.crs == this.crs ? extent : extent.as(this.crs, _extent);
-        return !(this.west >= other.east ||
-                 this.east <= other.west ||
-                 this.south >= other.north ||
-                 this.north <= other.south);
+        const other = extentB.crs == extentA.crs ? extentB : extentB.as(extentA.crs, _extent);
+        return !(extentA.west >= other.east ||
+            extentA.east <= other.west ||
+            extentA.south >= other.north ||
+            extentA.north <= other.south);
     }
 
     /**

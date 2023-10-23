@@ -4,7 +4,7 @@ import textureVS from 'Renderer/Shader/ProjectiveTextureVS.glsl';
 import textureFS from 'Renderer/Shader/ProjectiveTextureFS.glsl';
 import ShaderUtils from 'Renderer/Shader/ShaderUtils';
 
-const ndcToTextureMatrix = new THREE.Matrix4().set(
+const ndcToTextureMatrix = new THREE.Matrix4(
     1, 0, 0, 1,
     0, 1, 0, 1,
     0, 0, 2, 0,
@@ -174,7 +174,7 @@ class OrientedImageMaterial extends THREE.RawShaderMaterial {
      * @param {THREE.Camera} viewCamera - Camera of the scene.
      */
     updateUniforms(viewCamera) {
-        for (var i = 0; i < this.group.children.length; ++i) {
+        for (let i = 0; i < this.group.children.length; ++i) {
             const camera = this.group.children[i];
             if (camera.needsUpdate) {
                 camera.textureMatrixWorldInverse.multiplyMatrices(ndcToTextureMatrix, camera.projectionMatrix);

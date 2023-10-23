@@ -141,11 +141,7 @@ function defineStyleProperty(style, category, name, value, defaultValue) {
             enumerable: true,
             get: () => {
                 if (property === undefined) {
-                    if (style.parent[category] !== undefined){
-                        return style.parent[category][name] || defaultValue;
-                    } else {
-                        return defaultValue;
-                    }
+                    return style.parent[category][name] || defaultValue;
                 } else {
                     return property;
                 }
