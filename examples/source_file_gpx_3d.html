@@ -73,14 +73,14 @@
                             crs: view.referenceCrs,
                             structure: '3d',
                             style: new itowns.Style({
-                                stroke : {
+                                stroke: {
                                     color: 'red',
                                     width: 2,
                                 },
-                                point : {
+                                point: {
                                     color: 'white',
                                 }
-                            })
+                            }),
                         }
                     }))
                     .then(itowns.Feature2Mesh.convert())
