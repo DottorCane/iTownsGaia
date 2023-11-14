@@ -1,6 +1,6 @@
 {
     "name": "itownsgaia",
-    "version": "2.40.1",
+    "version": "2.40.2",
     "description": "iTowns framework and custom code for Gaia server",
     "main": "lib/Main.js",
     "exports": {
