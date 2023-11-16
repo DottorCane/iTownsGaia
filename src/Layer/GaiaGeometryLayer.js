@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import GeometryLayer from 'Layer/GeometryLayer';
 import FeatureProcessing from 'Process/FeatureProcessing';
 import GaiaPoint3DProcessing from 'Process/GaiaPoint3DProcessing';
-import PointsMaterial, { MODE } from 'Renderer/PointsMaterial';
+import PointsMaterial, { PNTS_MODE } from 'Renderer/PointsMaterial';
 import Feature2Mesh from 'Converter/Feature2Mesh';
 import Extent from 'Core/Geographic/Extent';
 
@@ -56,7 +56,7 @@ class GaiaGeometryLayer extends GeometryLayer {
             this.material = new PointsMaterial(config.material);
         }
         this.material.defines = this.material.defines || {};
-        this.mode = config.mode || MODE.COLOR;
+        this.mode = config.mode || PNTS_MODE.COLOR;
     }
 
     createPointsElement(geometry){
