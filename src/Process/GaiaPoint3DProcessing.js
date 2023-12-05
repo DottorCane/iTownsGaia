@@ -25,14 +25,16 @@ export default {
             node.layerUpdateState[layer.id] = new LayerUpdateState();
         } else if (!node.layerUpdateState[layer.id].canTryUpdate()) {
             // toggle visibility features
-
-            node.link.forEach((f) => {
-                if (f.layer?.id == layer.id) {
-                    f.layer.object3d.add(f);
-                    // f.meshes.position.z = geoidLayerIsVisible(layer.parent) ? node.geoidHeight : 0;
-                    // f.meshes.updateMatrixWorld();
-                }
-            });
+            /*
+            if (node.link!==null || node.link!==undefined){
+                node.link.forEach((f) => {
+                    if (f.layer?.id == layer.id) {
+                        f.layer.object3d.add(f);
+                        // f.meshes.position.z = geoidLayerIsVisible(layer.parent) ? node.geoidHeight : 0;
+                        // f.meshes.updateMatrixWorld();
+                    }
+                });
+            }*/
 
             return;
         }
@@ -138,7 +140,7 @@ export default {
                          ObjectRemovalHelper.removeChildrenAndCleanupRecursively(layer, points);
                     } else {
                         layer.object3d.add(points);
-                        node.link.push(points);
+                        //node.link.push(points);
                     }
                 } else {
                     // TODO: verify if it's possible the featureMesh is undefined.
