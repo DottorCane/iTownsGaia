@@ -122,6 +122,7 @@ class WFSSource extends Source {
 
         this.isWFSSource = true;
         this.typeName = source.typeName;
+        this.layersVisibility = source.typeName;
         this.version = source.version || '2.0.2';
 
         // Add ? at the end of the url if it is not already in the given URL
@@ -168,7 +169,8 @@ class WFSSource extends Source {
     }
 
     urlFromExtent(extent) {
-        return URLBuilder.bbox(extent, this);
+        var url =  URLBuilder.bbox(extent, this);
+        return url.replace('%layers%',this.layersVisibility);
     }
 
     extentInsideLimit(extent) {

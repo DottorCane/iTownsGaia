@@ -92,6 +92,7 @@ class WMSSource extends Source {
 
         this.isWMSSource = true;
         this.name = source.name;
+        this.layersVisibility = source.name;
         this.zoom = { min: 0, max: Infinity };
         this.style = source.style || '';
 
@@ -118,6 +119,7 @@ class WMSSource extends Source {
         if (!this.url.endsWith('?')) {
             this.url = `${this.url}?`;
         }
+        /*
         this.url = `${this.url}SERVICE=WMS&REQUEST=GetMap&LAYERS=${
             this.name}&VERSION=${
             this.version}&STYLES=${
@@ -126,7 +128,14 @@ class WMSSource extends Source {
             this.transparent}&BBOX=%bbox&${
             crsPropName}=${
             this.crs}&WIDTH=${this.width}&HEIGHT=${this.height}`;
-
+        */
+        this.url = `${this.url}SERVICE=WMS&REQUEST=GetMap&LAYERS=%layers%&VERSION=${
+            this.version}&STYLES=${
+            this.style}&FORMAT=${
+            this.format}&TRANSPARENT=${
+            this.transparent}&BBOX=%bbox&${
+            crsPropName}=${
+            this.crs}&WIDTH=${this.width}&HEIGHT=${this.height}`;
 
         this.vendorSpecific = source.vendorSpecific;
         for (const name in this.vendorSpecific) {
@@ -137,11 +146,12 @@ class WMSSource extends Source {
     }
 
     urlFromExtent(extent) {
-        return URLBuilder.bbox(extent, this);
+        var url =  URLBuilder.bbox(extent, this);
+        return url.replace('%layers%',this.layersVisibility);
     }
 
     extentInsideLimit(extent) {
-        return this.extent.intersectsExtent(extent);
+        return  this.extent.intersectsExtent(extent);
     }
 }
 
