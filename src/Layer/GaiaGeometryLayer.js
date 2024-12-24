@@ -37,6 +37,7 @@ class GaiaGeometryLayer extends GeometryLayer {
                 config.offset.z = 0;
             }
             this.offset = new THREE.Vector3(config.offset.x, config.offset.y, config.offset.z);
+            this.offsetInitial = new THREE.Vector3(config.offset.x, config.offset.y, config.offset.z);
         }
 
 
@@ -160,6 +161,13 @@ class GaiaGeometryLayer extends GeometryLayer {
         for (const tilePoint of this.object3d.children) {
             tilePoint.material = materialNew;
             tilePoint.material.needsUpdate = true;
+        }
+    }
+    updatePosition(){
+        for (const tilePoint of this.object3d.children) {
+            var pointFinal = tilePoint.geometry.boundingBox.min.clone().sub(this.offsetInitial);
+            var pointFinal = pointFinal.add(this.offset);
+            tilePoint.position.copy(pointFinal);
         }
     }
 

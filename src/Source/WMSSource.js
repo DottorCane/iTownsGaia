@@ -151,6 +151,21 @@ class WMSSource extends Source {
     }
 
     extentInsideLimit(extent) {
+        var extentA = extent;
+        var other = this.extent;
+
+        var result1 = !(extentA.west >= other.east || extentA.east <= other.west || extentA.south >= other.north || extentA.north <= other.south);
+
+        var intersectX = extentA.west <= other.east && extentA.east >= other.west;
+        var intersectY = extentA.south <= other.north && extentA.north >= other.south;
+
+        var result2 = false;
+        if (intersectX && intersectY) {
+            result2 = true;
+        }
+
+        //console.log(result1 + " " + result2);
+
         return  this.extent.intersectsExtent(extent);
     }
 }
