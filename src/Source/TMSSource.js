@@ -1,15 +1,15 @@
 import Source from 'Source/Source';
 import URLBuilder from 'Provider/URLBuilder';
-import Extent, { globalExtentTMS } from 'Core/Geographic/Extent';
-import CRS from 'Core/Geographic/Crs';
+import Extent from 'Core/Geographic/Extent';
+import Tile from 'Core/Tile/Tile';
+import { globalExtentTMS } from 'Core/Tile/TileGrid';
 
-const extent = new Extent(CRS.tms_4326, 0, 0, 0);
+const _tile = new Tile('EPSG:4326', 0, 0, 0);
 
 /**
- * @classdesc
- * An object defining the source of resources to get from a [TMS]{@link
- * https://wiki.osgeo.org/wiki/Tile_Map_Service_Specification} server. It
- * inherits from {@link Source}.
+ * An object defining the source of resources to get from a
+ * [TMS](https://wiki.osgeo.org/wiki/Tile_Map_Service_Specification) server.
+ * It inherits from {@link Source}.
  *
  * @extends Source
  *
@@ -19,8 +19,8 @@ const extent = new Extent(CRS.tms_4326, 0, 0, 0);
  * @property {boolean} isInverted - The isInverted property is to be set to the
  * correct value, true or false (default being false) if the computation of the
  * coordinates needs to be inverted to match the same scheme as OSM, Google Maps
- * or other system. See [this link]{@link
- * https://alastaira.wordpress.com/2011/07/06/converting-tms-tile-coordinates-to-googlebingosm-tile-coordinates/}
+ * or other system. See [this link](
+ * https://alastaira.wordpress.com/2011/07/06/converting-tms-tile-coordinates-to-googlebingosm-tile-coordinates/)
  * for more information.
  * @property {Object} tileMatrixSetLimits - it describes the available tile for this layer
  * @property {Object} extentSetlimits - these are the extents of the set of identical zoom tiles.
@@ -74,26 +74,17 @@ class TMSSource extends Source {
     /**
      * @param {Object} source - An object that can contain all properties of a
      * TMSSource and {@link Source}. Only `url` is mandatory.
-     *
-     * @constructor
      */
     constructor(source) {
-        if (!source.crs && !source.projection) {
-            throw new Error('New TMSSource/WMTSSource: crs projection is required');
-        }
-
         source.format = source.format || 'image/png';
 
         super(source);
 
-        // this.isTMSSource = true;
-        //TODO:FIX, imposto che il parametro dipende dal config e non è fisso
-        if (source.isTMSSource !== undefined) {
-            this.isTMSSource = source.isTMSSource;
-        } else {
-            this.isTMSSource = true;
+        if (!source.crs) {
+            throw new Error('New TMSSource/WMTSSource: crs is required');
         }
 
+        this.isTMSSource = true;
 
         if (!source.extent) {
             // default to the global extent
@@ -103,12 +94,7 @@ class TMSSource extends Source {
         this.zoom = source.zoom;
 
         this.isInverted = source.isInverted || false;
-        this.url = source.url;
-        if (this.isTMSSource) {
-            this.crs = CRS.formatToTms(source.crs);
-        } else {
-            this.crs = source.crs;
-        }
+        this.crs = source.crs;
         this.tileMatrixSetLimits = source.tileMatrixSetLimits;
         this.extentSetlimits = {};
         this.tileMatrixCallback = source.tileMatrixCallback || (zoomLevel => zoomLevel);
@@ -130,8 +116,9 @@ class TMSSource extends Source {
         }
     }
 
-    urlFromExtent(extent) {
-        return URLBuilder.xyz(extent, this);
+    urlFromExtent(tile) {
+        //console.log("urlFromExtent TMS " + tile);
+        return URLBuilder.xyz(tile, this);
     }
 
     onLayerAdded(options) {
@@ -142,11 +129,11 @@ class TMSSource extends Source {
         const crs = parent ? parent.extent.crs : options.out.crs;
         if (this.tileMatrixSetLimits && !this.extentSetlimits[crs]) {
             this.extentSetlimits[crs] = {};
-            extent.crs = this.crs;
+            _tile.crs = this.crs;
             for (let i = this.zoom.max; i >= this.zoom.min; i--) {
                 const tmsl = this.tileMatrixSetLimits[i];
-                const { west, north } = extent.set(i, tmsl.minTileRow, tmsl.minTileCol).as(crs);
-                const { east, south } = extent.set(i, tmsl.maxTileRow, tmsl.maxTileCol).as(crs);
+                const { west, north } = _tile.set(i, tmsl.minTileRow, tmsl.minTileCol).toExtent(crs);
+                const { east, south } = _tile.set(i, tmsl.maxTileRow, tmsl.maxTileCol).toExtent(crs);
                 this.extentSetlimits[crs][i] = new Extent(crs, west, east, south, north);
             }
         }

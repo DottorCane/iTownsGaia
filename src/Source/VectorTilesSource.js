@@ -1,6 +1,7 @@
-import { featureFilter } from '@mapbox/mapbox-gl-style-spec';
+import { featureFilter } from '@maplibre/maplibre-gl-style-spec';
 import Style from 'Core/Style';
 import TMSSource from 'Source/TMSSource';
+import URLBuilder from 'Provider/URLBuilder';
 import Fetcher from 'Provider/Fetcher';
 import urlParser from 'Parser/MapBoxUrlParser';
 
@@ -8,8 +9,28 @@ function toTMSUrl(url) {
     return url.replace(/\{/g, '${');
 }
 
+function mergeCollections(collections) {
+    const collection = collections[0];
+    collections.forEach((col, index) => {
+        if (index === 0) { return; }
+        col.features.forEach((feature) => {
+            collection.features.push(feature);
+        });
+    });
+    return collection;
+}
+
+// A deprecated (but still in use) Mapbox spec allows using 'ref' as a propertie to reference an other layer
+// instead of duplicating the following properties: 'type', 'source', 'source-layer', 'minzoom', 'maxzoom', 'filter', 'layout'
+function getPropertiesFromRefLayer(layers, layer) {
+    const refProperties = ['type', 'source', 'source-layer', 'minzoom', 'maxzoom', 'filter', 'layout'];
+    const refLayer = layers.filter(l => l.id === layer.ref)[0];
+    refProperties.forEach((prop) => {
+        layer[prop] = refLayer[prop];
+    });
+}
+
 /**
- * @classdesc
  * VectorTilesSource are object containing informations on how to fetch vector
  * tiles resources.
  *
@@ -44,7 +65,6 @@ class VectorTilesSource extends TMSSource {
      * Specification](https://docs.mapbox.com/mapbox-gl-js/style-spec/sources/)
      * for more informations.
      * @param {string} [source.accessToken] - Mapbox access token
-     * @constructor
      */
     constructor(source) {
         source.format = 'application/x-protobuf;type=mapbox-vector';
@@ -53,16 +73,19 @@ class VectorTilesSource extends TMSSource {
         source.url = source.url || '.';
         super(source);
         const ffilter = source.filter || (() => true);
+        this.urls = [];
         this.layers = {};
         this.styles = {};
         let promise;
+        this.isVectorTileSource = true;
 
         this.accessToken = source.accessToken;
 
+        let mvtStyleUrl;
         if (source.style) {
             if (typeof source.style == 'string') {
-                const styleUrl = urlParser.normalizeStyleURL(source.style, this.accessToken);
-                promise = Fetcher.json(styleUrl, this.networkOptions);
+                mvtStyleUrl = urlParser.normalizeStyleURL(source.style, this.accessToken);
+                promise = Fetcher.json(mvtStyleUrl, this.networkOptions);
             } else {
                 promise = Promise.resolve(source.style);
             }
@@ -70,34 +93,31 @@ class VectorTilesSource extends TMSSource {
             throw new Error('New VectorTilesSource: style is required');
         }
 
-        this.whenReady = promise.then((style) => {
-            this.jsonStyle = style;
-            const baseurl = source.sprite || style.sprite;
+        this.whenReady = promise.then((mvtStyle) => {
+            this.jsonStyle = mvtStyle;
+            let baseurl = source.sprite || mvtStyle.sprite;
             if (baseurl) {
+                baseurl = new URL(baseurl, mvtStyleUrl).toString();
                 const spriteUrl = urlParser.normalizeSpriteURL(baseurl, '', '.json', this.accessToken);
                 return Fetcher.json(spriteUrl, this.networkOptions).then((sprites) => {
                     this.sprites = sprites;
                     const imgUrl = urlParser.normalizeSpriteURL(baseurl, '', '.png', this.accessToken);
-                    return Fetcher.texture(imgUrl, this.networkOptions).then((texture) => {
-                        this.sprites.img = texture.image;
-                        return style;
-                    });
+                    this.sprites.source = imgUrl;
+                    return mvtStyle;
                 });
             }
 
-            return style;
-        }).then((style) => {
-            const s = Object.keys(style.sources)[0];
-            const os = style.sources[s];
-
-            style.layers.forEach((layer, order) => {
+            return mvtStyle;
+        }).then((mvtStyle) => {
+            mvtStyle.layers.forEach((layer, order) => {
                 layer.sourceUid = this.uid;
                 if (layer.type === 'background') {
                     this.backgroundLayer = layer;
                 } else if (ffilter(layer)) {
-                    const style = new Style().setFromVectorTileLayer(layer, this.sprites, order, this.symbolToCircle);
-                    style.zoom.min = layer.minzoom || 0;
-                    style.zoom.max = layer.maxzoom || 24;
+                    if (layer['source-layer'] === undefined) {
+                        getPropertiesFromRefLayer(mvtStyle.layers, layer);
+                    }
+                    const style = Style.setFromVectorTileLayer(layer, this.sprites, this.symbolToCircle);
                     this.styles[layer.id] = style;
 
                     if (!this.layers[layer['source-layer']]) {
@@ -107,24 +127,36 @@ class VectorTilesSource extends TMSSource {
                         id: layer.id,
                         order,
                         filterExpression: featureFilter(layer.filter),
-                        zoom: style.zoom,
                     });
                 }
             });
 
             if (this.url == '.') {
-                if (os.url) {
-                    const urlSource = urlParser.normalizeSourceURL(os.url, this.accessToken);
-                    return Fetcher.json(urlSource, this.networkOptions).then((tileJSON) => {
-                        if (tileJSON.tiles[0]) {
-                            this.url = toTMSUrl(tileJSON.tiles[0]);
-                        }
-                    });
-                } else if (os.tiles[0]) {
-                    this.url = toTMSUrl(os.tiles[0]);
-                }
+                const TMSUrlList = Object.values(mvtStyle.sources).map((sourceVT) => {
+                    if (sourceVT.url) {
+                        sourceVT.url = new URL(sourceVT.url, mvtStyleUrl).toString();
+                        const urlSource = urlParser.normalizeSourceURL(sourceVT.url, this.accessToken);
+                        return Fetcher.json(urlSource, this.networkOptions).then((tileJSON) => {
+                            if (tileJSON.tiles[0]) {
+                                tileJSON.tiles[0] = decodeURIComponent(new URL(tileJSON.tiles[0], urlSource).toString());
+                                return toTMSUrl(tileJSON.tiles[0]);
+                            }
+                        });
+                    } else if (sourceVT.tiles) {
+                        return Promise.resolve(toTMSUrl(sourceVT.tiles[0]));
+                    }
+                    return Promise.reject();
+                });
+                return Promise.all(TMSUrlList);
             }
+            return (Promise.resolve([toTMSUrl(this.url)]));
+        }).then((TMSUrlList) => {
+            this.urls = Array.from(new Set(TMSUrlList));
         });
+    }
+
+    urlFromExtent(tile, url) {
+        return URLBuilder.xyz(tile, { tileMatrixCallback: this.tileMatrixCallback, url });
     }
 
     onLayerAdded(options) {
@@ -134,10 +166,33 @@ class VectorTilesSource extends TMSSource {
                 console.warn('With VectorTilesSource and FeatureGeometryLayer, the accurate option is always false');
                 options.out.accurate = false;
             }
-            const keys = Object.keys(this.styles);
-
-            keys.forEach((k) => { this.styles[k].parent = options.out.style; });
         }
+    }
+
+    loadData(extent, out) {
+        const cache = this._featuresCaches[out.crs];
+        const key = this.requestToKey(extent);
+        // try to get parsed data from cache
+        let features = cache.getByArray(key);
+        if (!features) {
+            // otherwise fetch/parse the data
+            features = cache.setByArray(
+                Promise.all(this.urls.map(url =>
+                    this.fetcher(this.urlFromExtent(extent, url), this.networkOptions)
+                        .then(file => this.parser(file, { out, in: this, extent }))))
+                    .then(collections => mergeCollections(collections))
+                    .catch(err => this.handlingError(err)),
+                key);
+
+            if (this.onParsedFile) {
+                features.then((feat) => {
+                    this.onParsedFile(feat);
+                    console.warn('Source.onParsedFile was deprecated');
+                    return feat;
+                });
+            }
+        }
+        return features;
     }
 }
 

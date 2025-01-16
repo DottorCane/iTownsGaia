@@ -1,11 +1,12 @@
 import Source from 'Source/Source';
 import URLBuilder from 'Provider/URLBuilder';
-import CRS from 'Core/Geographic/Crs';
+import Extent from 'Core/Geographic/Extent';
+
+const _extent = new Extent('EPSG:4326', [0, 0, 0, 0]);
 
 /**
- * @classdesc
  * An object defining the source of resources to get from a
- * [WFS]{@link http://www.opengeospatial.org/standards/wfs} server. It inherits
+ * [WFS](http://www.opengeospatial.org/standards/wfs) server. It inherits
  * from {@link Source}.
  *
  * @extends Source
@@ -23,6 +24,7 @@ import CRS from 'Core/Geographic/Crs';
  * is 0.
  * @property {number} zoom.max - The maximum level of the source. Default value
  * is 21.
+ * @property {string} bboxDigits - The bbox digits precision used in URL
  * @property {Object} vendorSpecific - An object containing vendor specific
  * parameters. See for example a [list of these parameters for GeoServer]{@link
  * https://docs.geoserver.org/latest/en/user/services/wfs/vendor.html}. This
@@ -34,7 +36,7 @@ import CRS from 'Core/Geographic/Crs';
  * // Add color layer with WFS source
  * // Create the source
  * const wfsSource = new itowns.WFSSource({
- *     url: 'http://wxs.fr/wfs',
+ *     url: 'https://data.geopf.fr/wfs/ows?',
  *     version: '2.0.0',
  *     typeName: 'BDTOPO_BDD_WLD_WGS84G:bati_remarquable',
  *     crs: 'EPSG:4326',
@@ -65,7 +67,7 @@ import CRS from 'Core/Geographic/Crs';
  * // Add geometry layer with WFS source
  * // Create the source
  * const wfsSource = new itowns.WFSSource({
- *     url: 'http://wxs.fr/wfs',
+ *     url: 'https://data.geopf.fr/wfs/ows?',
  *     version: '2.0.0',
  *     typeName: 'BDTOPO_BDD_WLD_WGS84G:bati_remarquable',
  *     crs: 'EPSG:4326',
@@ -100,8 +102,6 @@ class WFSSource extends Source {
      * @param {Object} source - An object that can contain all properties of a
      * WFSSource and {@link Source}. `url`, `typeName` and `crs` are
      * mandatory.
-     *
-     * @constructor
      */
     constructor(source) {
         if (source.projection) {
@@ -122,28 +122,27 @@ class WFSSource extends Source {
 
         this.isWFSSource = true;
         this.typeName = source.typeName;
-        this.layersVisibility = source.typeName;
         this.version = source.version || '2.0.2';
-
-        // Add ? at the end of the url if it is not already in the given URL
-        if (!this.url.endsWith('?')) {
-            this.url = `${this.url}?`;
-        }
-        this.url = `${source.url
-        }SERVICE=WFS&REQUEST=GetFeature&typeName=${this.typeName
-        }&VERSION=${this.version
-        }&SRSNAME=${this.crs
-        }&outputFormat=${this.format
-        }&BBOX=%bbox,${this.crs}`;
-
+        this.bboxDigits = source.bboxDigits;
         this.zoom = { min: 0, max: Infinity };
+
+        const urlObj = new URL(source.url);
+        urlObj.searchParams.set('SERVICE', 'WFS');
+        urlObj.searchParams.set('REQUEST', 'GetFeature');
+        urlObj.searchParams.set('typeName', this.typeName);
+        urlObj.searchParams.set('VERSION', this.version);
+        urlObj.searchParams.set('SRSNAME', this.crs);
+        urlObj.searchParams.set('outputFormat', this.format);
+        urlObj.searchParams.set('BBOX', `%bbox,${this.crs}`);
 
         this.vendorSpecific = source.vendorSpecific;
         for (const name in this.vendorSpecific) {
             if (Object.prototype.hasOwnProperty.call(this.vendorSpecific, name)) {
-                this.url = `${this.url}&${name}=${this.vendorSpecific[name]}`;
+                urlObj.searchParams.set(name, this.vendorSpecific[name]);
             }
         }
+
+        this.url = decodeURIComponent(urlObj.toString());
     }
 
     handlingError(err) {
@@ -161,16 +160,18 @@ class WFSSource extends Source {
     }
 
     requestToKey(extent) {
-        if (CRS.isTms(extent.crs)) {
+        if (extent.isTile) {
             return super.requestToKey(extent);
         } else {
             return [extent.zoom, extent.south, extent.west];
         }
     }
 
-    urlFromExtent(extent) {
-        var url =  URLBuilder.bbox(extent, this);
-        return url.replace('%layers%',this.layersVisibility);
+    urlFromExtent(extentOrTile) {
+        const extent = extentOrTile.isExtent ?
+            extentOrTile.as(this.crs, _extent) :
+            extentOrTile.toExtent(this.crs, _extent);
+        return URLBuilder.bbox(extent, this);
     }
 
     extentInsideLimit(extent) {

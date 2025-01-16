@@ -15,7 +15,6 @@ export const deprecatedColorLayerOptions = (options) => {
 };
 
 export const deprecatedParsingOptionsToNewOne = (options) => {
-    /* istanbul ignore next */
     if (options.crsOut || options.crsIn) {
         console.warn('Parsing options with crsIn and crsOut are deprecated, use { in, out } structure.');
         const newOptions = { in: {}, out: {} };
@@ -76,7 +75,7 @@ export const deprecatedFeature2MeshOptions = (options) => {
 
 export const deprecatedC3DEngineWebGLOptions = (options) => {
     if (options.isWebGL2 === false) {
-        console.warn('WebGL1 support (isWebGL2=false) is deprecated and will be removed in iTowns 2.43. This follows its deprecation by three.js. If you are impacted by this change, please discuss in the following issue: https://github.com/iTowns/itowns/issues/2152.');
+        console.error('WebGL1 support ended in 2.43.0. Falling-back to the WebGL2 renderer.');
     }
 };
 

@@ -1,4 +1,4 @@
-const assert = require('assert');
+import assert from 'assert';
 
 describe('view_25d_map', function _() {
     let result;
@@ -11,6 +11,10 @@ describe('view_25d_map', function _() {
     });
 
     it('should subdivise planar correctly', async () => {
+        // Test that there is a given number of "visible" tiles (i.e.
+        // `material.visible` property of a tile is set) for each tested level.
+        // Uses the property `view.tileLayer.info.displayed.tiles` of type
+        // InfoTiledGeometryLayer to retrieve such information
         const displayedTiles = await page.evaluate(() => {
             r = {};
             [...view.tileLayer.info.displayed.tiles]
@@ -29,18 +33,17 @@ describe('view_25d_map', function _() {
         // get range with depth buffer and altitude
         await page.evaluate((l) => {
             const lookat = extent.center().toVector3();
-
-            view.camera.camera3D.position.copy(lookat);
-            view.camera.camera3D.position.z = l;
-            view.camera.camera3D.lookAt(lookat);
-            view.notifyChange(view.camera.camera3D, true);
+            view.camera3D.position.copy(lookat);
+            view.camera3D.position.z = l;
+            view.camera3D.lookAt(lookat);
+            view.notifyChange(view.camera3D, true);
         }, length);
 
         await waitUntilItownsIsIdle(this.test.fullTitle());
 
         result = await page.evaluate(() => {
             const depthMethod = view
-                .getPickingPositionFromDepth().distanceTo(view.camera.camera3D.position);
+                .getPickingPositionFromDepth().distanceTo(view.camera3D.position);
 
             const altitude = itowns.DEMUtils
                 .getElevationValueAt(view.tileLayer, extent.center().clone());

@@ -1,10 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
-
 import * as THREE from 'three';
 import GeometryLayer from 'Layer/GeometryLayer';
 import Coordinates from 'Core/Geographic/Coordinates';
@@ -29,7 +22,9 @@ const spaceColor = new THREE.Color(0x030508);
 const limitAlti = 600000;
 const mfogDistance = ellipsoidSizes.x * 160.0;
 
-
+/**
+ * @extends GeometryLayer
+ */
 class Atmosphere extends GeometryLayer {
     /**
     * It's layer to simulate Globe atmosphere.
@@ -37,10 +32,7 @@ class Atmosphere extends GeometryLayer {
      *
     * The atmospheric-scattering it is taken from :
     * * [Atmosphere Shader From Space (Atmospheric scattering)](http://stainlessbeer.weebly.com/planets-9-atmospheric-scattering.html)
-    * * [Accurate Atmospheric Scattering (NVIDIA GPU Gems 2)]{@link https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-16-accurate-atmospheric-scattering}.
-    *
-    * @constructor
-    * @extends GeometryLayer
+    * * [Accurate Atmospheric Scattering (NVIDIA GPU Gems 2)](https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-16-accurate-atmospheric-scattering).
     *
     * @param {string} id - The id of the layer Atmosphere.
     * @param {Object} [options] - options layer.
@@ -147,7 +139,7 @@ class Atmosphere extends GeometryLayer {
 
     // eslint-disable-next-line no-unused-vars
     preUpdate(context, srcs) {
-        const cameraPosition = context.view.camera.camera3D.position;
+        const cameraPosition = context.view.camera3D.position;
         if (this.fog.enable) {
             v.setFromMatrixPosition(context.view.tileLayer.object3d.matrixWorld);
             const len = v.distanceTo(cameraPosition);

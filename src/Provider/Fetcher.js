@@ -1,4 +1,4 @@
-import { TextureLoader, DataTexture, RedFormat, FloatType, AlphaFormat } from 'three';
+import { TextureLoader, DataTexture, RedFormat, FloatType } from 'three';
 
 const textureLoader = new TextureLoader();
 const SIZE_TEXTURE_TILE = 256;
@@ -15,21 +15,16 @@ const arrayBuffer = (url, options = {}) => fetch(url, options).then((response) =
     return response.arrayBuffer();
 });
 
-function getTextureFloat(buffer, isWebGL2 = true) {
-    if (isWebGL2) {
-        const texture = new DataTexture(buffer, SIZE_TEXTURE_TILE, SIZE_TEXTURE_TILE, RedFormat, FloatType);
-        texture.internalFormat = 'R32F';
-        texture.needsUpdate = true;
-        return texture;
-    } else {
-        const texture = new DataTexture(buffer, SIZE_TEXTURE_TILE, SIZE_TEXTURE_TILE, AlphaFormat, FloatType);
-        return texture;
-    }
+function getTextureFloat(buffer) {
+    const texture = new DataTexture(buffer, SIZE_TEXTURE_TILE, SIZE_TEXTURE_TILE, RedFormat, FloatType);
+    texture.internalFormat = 'R32F';
+    texture.needsUpdate = true;
+    return texture;
 }
 
 /**
- * Utilitary to fetch resources from a server using the [fetch API]{@link
- * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch}.
+ * Utilitary to fetch resources from a server using the [fetch API](
+ * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch).
  *
  * @module Fetcher
  */
@@ -39,8 +34,8 @@ export default {
      *
      * @param {string} url - The URL of the resources to fetch.
      * @param {Object} options - Fetch options (passed directly to `fetch()`),
-     * see [the syntax for more information]{@link
-     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax}.
+     * see [the syntax for more information](
+     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax).
      *
      * @return {Promise<string>} Promise containing the text.
      */
@@ -56,8 +51,8 @@ export default {
      *
      * @param {string} url - The URL of the resources to fetch.
      * @param {Object} options - Fetch options (passed directly to `fetch()`),
-     * see [the syntax for more information]{@link
-     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax}.
+     * see [the syntax for more information](
+     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax).
      *
      * @return {Promise<Object>} Promise containing the JSON object.
      */
@@ -73,8 +68,8 @@ export default {
      *
      * @param {string} url - The URL of the resources to fetch.
      * @param {Object} options - Fetch options (passed directly to `fetch()`),
-     * see [the syntax for more information]{@link
-     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax}.
+     * see [the syntax for more information](
+     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax).
      *
      * @return {Promise<Document>} Promise containing the XML Document.
      */
@@ -86,17 +81,17 @@ export default {
     },
 
     /**
-     * Wrapper around {@link THREE.TextureLoader}.
+     * Wrapper around [THREE.TextureLoader](https://threejs.org/docs/#api/en/loaders/TextureLoader).
      *
      * @param {string} url - The URL of the resources to fetch.
      * @param {Object} options - Fetch options (passed directly to `fetch()`),
-     * see [the syntax for more information]{@link
-     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax}.
+     * see [the syntax for more information](
+     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax).
      * Note that THREE.js docs mentions `withCredentials`, but it is not
-     * actually used in {@link THREE.TextureLoader}.
+     * actually used in [THREE.TextureLoader](https://threejs.org/docs/#api/en/loaders/TextureLoader).
      *
-     * @return {Promise<THREE.Texture>} Promise containing the {@link
-     * THREE.Texture}.
+     * @return {Promise<THREE.Texture>} Promise containing the
+     * [THREE.Texture](https://threejs.org/docs/api/en/textures/Texture.html).
      */
     texture(url, options = {}) {
         let res;
@@ -109,7 +104,11 @@ export default {
             rej = reject;
         });
 
-        textureLoader.load(url, res, () => {}, rej);
+        textureLoader.load(url, res, () => {}, (event) => {
+            const error = new Error(`Failed to load texture from URL: \`${url}\``);
+            error.originalEvent = event;
+            rej(error);
+        });
         return promise;
     },
 
@@ -118,27 +117,28 @@ export default {
      *
      * @param {string} url - The URL of the resources to fetch.
      * @param {Object} options - Fetch options (passed directly to `fetch()`),
-     * see [the syntax for more information]{@link
-     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax}.
+     * see [the syntax for more information](
+     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax).
      *
      * @return {Promise<ArrayBuffer>} Promise containing the ArrayBuffer.
      */
     arrayBuffer,
 
     /**
-     * Wrapper over fetch to get some {@link THREE.DataTexture}.
+     * Wrapper over fetch to get some
+     * [THREE.DataTexture](https://threejs.org/docs/#api/en/textures/DataTexture).
      *
      * @param {string} url - The URL of the resources to fetch.
      * @param {Object} options - Fetch options (passed directly to `fetch()`),
-     * see [the syntax for more information]{@link
-     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax}.
+     * see [the syntax for more information](
+     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax).
      *
      * @return {Promise<THREE.DataTexture>} Promise containing the DataTexture.
      */
     textureFloat(url, options = {}) {
         return arrayBuffer(url, options).then((buffer) => {
             const floatArray = new Float32Array(buffer);
-            const texture = getTextureFloat(floatArray, options.isWebGL2);
+            const texture = getTextureFloat(floatArray);
             return texture;
         });
     },
@@ -153,8 +153,8 @@ export default {
      * even `arrayBuffer`. The arrays contains the extensions to append after
      * the `baseUrl` (see example below).
      * @param {Object} options - Fetch options (passed directly to `fetch()`),
-     * see [the syntax for more information]{@link
-     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax}.
+     * see [the syntax for more information](
+     * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax).
      *
      * @return {Promise[]} An array of promises, containing all the files,
      * organized by their extensions (see the example below).
@@ -204,5 +204,36 @@ export default {
 
             return Promise.resolve(all);
         });
+    },
+
+    get(format = '') {
+        const [type, subtype] = format.split('/');
+        switch (type) {
+            case 'application':
+                switch (subtype) {
+                    case 'geo+json':
+                    case 'json':
+                        return this.json;
+                    case 'kml':
+                    case 'gpx':
+                        return this.xml;
+                    case 'x-protobuf;type=mapbox-vector':
+                    case 'gtx':
+                        return this.arrayBuffer;
+                    case 'isg':
+                    case 'gdf':
+                    default:
+                        return this.text;
+                }
+            case 'image':
+                switch (subtype) {
+                    case 'x-bil;bits=32':
+                        return this.textureFloat;
+                    default:
+                        return this.texture;
+                }
+            default:
+                return this.texture;
+        }
     },
 };

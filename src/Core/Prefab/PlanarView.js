@@ -8,13 +8,7 @@ import PlanarLayer from './Planar/PlanarLayer';
 
 class PlanarView extends View {
     /**
-     * @constructor
      * @extends View
-     *
-     * @example <caption><b>Enable WebGl 1.0 instead of WebGl 2.0.</b></caption>
-     * var viewerDiv = document.getElementById('viewerDiv');
-     * const extent = new Extent('EPSG:3946', 1837816.94334, 1847692.32501, 5170036.4587, 5178412.82698);
-     * var view = new itowns.PlanarView(viewerDiv, extent, {  renderer: { isWebGL2: false } });
      *
      * @example <caption><b>Instance with placement on the ground.</b></caption>
      * var viewerDiv = document.getElementById('viewerDiv');
@@ -24,9 +18,9 @@ class PlanarView extends View {
      * @param {HTMLDivElement} viewerDiv - Where to attach the view and display it
      * in the DOM.
      * @param {Extent} extent - The ground extent.
-     * @param {object=} options - See options of {@link View}.
+     * @param {Object} [options] - See options of {@link View}.
      * @param {boolean} [options.noControls=false] - If true, no controls are associated to the view.
-     * @param {object=} [options.controls] - options for the {@link PlanarControls} associated to the view, if
+     * @param {Object} [options.controls] - options for the {@link PlanarControls} associated to the view, if
      * `options.noControls` is false.
      * @param {CameraUtils~CameraTransformOptions|Extent} [options.placement] - The
      * {@link CameraUtils~CameraTransformOptions} to apply to view's camera or the extent it must display at
@@ -42,10 +36,9 @@ class PlanarView extends View {
         // Configure camera
         const dim = extent.planarDimensions();
         const max = Math.max(dim.x, dim.y);
-        const camera3D = this.camera.camera3D;
-        camera3D.near = 0.1;
-        camera3D.far = camera3D.isOrthographicCamera ? 2000 : 2 * max;
-        camera3D.updateProjectionMatrix();
+        this.camera3D.near = 0.1;
+        this.camera3D.far = this.camera3D.isOrthographicCamera ? 2000 : 2 * max;
+        this.camera3D.updateProjectionMatrix();
 
         const tileLayer = new PlanarLayer('planar', extent, options.object3d, options);
         this.mainLoop.gfxEngine.label2dRenderer.infoTileLayer = tileLayer.info;
@@ -60,7 +53,7 @@ class PlanarView extends View {
             placement.heading = placement.heading || 0;
             placement.range = placement.range || max;
         }
-        CameraUtils.transformCameraToLookAtTarget(this, camera3D, placement);
+        CameraUtils.transformCameraToLookAtTarget(this, this.camera3D, placement);
 
         if (!options.noControls) {
             this.controls = new PlanarControls(this, options.controls);

@@ -14,8 +14,8 @@ describe('GlobeControls', function () {
     const controls = viewer.controls;
 
     viewer.getPickingPositionFromDepth = (coords, pickingPoint) => {
-        viewer.camera.camera3D.updateMatrixWorld();
-        const lookAt = getLookAtFromMath(viewer, viewer.camera.camera3D);
+        viewer.camera3D.updateMatrixWorld();
+        const lookAt = getLookAtFromMath(viewer, viewer.camera3D);
         if (lookAt) {
             if (pickingPoint) {
                 pickingPoint.copy(lookAt);
@@ -58,19 +58,21 @@ describe('GlobeControls', function () {
     const heading = 4;
 
     it('Set tilt', function (done) {
-        controls.setTilt(tilt, false).then((e) => {
-            assert.equal(e.tilt, tilt);
-            assert.equal((tilt / controls.getTilt()).toFixed(8), 1);
-            done();
-        });
+        controls.setTilt(tilt, false)
+            .then((e) => {
+                assert.equal(e.tilt, tilt);
+                assert.equal((tilt / controls.getTilt()).toFixed(8), 1);
+                done();
+            }).catch(done);
     });
 
     it('Set heading', function (done) {
-        controls.setHeading(heading, false).then((e) => {
-            assert.equal(e.heading, heading);
-            assert.equal((heading / controls.getHeading()).toFixed(8), 1);
-            done();
-        });
+        controls.setHeading(heading, false)
+            .then((e) => {
+                assert.equal(e.heading, heading);
+                assert.equal((heading / controls.getHeading()).toFixed(8), 1);
+                done();
+            }).catch(done);
     });
 
     it('getCameraOrientation', function () {
@@ -91,26 +93,29 @@ describe('GlobeControls', function () {
 
     it('Set zoom', function (done) {
         const zoom = 10;
-        controls.setZoom(zoom, false).then(() => {
-            assert.equal(zoom, controls.getZoom());
-            done();
-        });
+        controls.setZoom(zoom, false)
+            .then(() => {
+                assert.equal(zoom, controls.getZoom());
+                done();
+            }).catch(done);
     });
 
     it('Set range', function (done) {
         const range = 1000;
-        controls.setRange(range, false).then((e) => {
-            assert.equal((e.range / range).toFixed(8), 1);
-            done();
-        });
+        controls.setRange(range, false)
+            .then((e) => {
+                assert.equal((e.range / range).toFixed(8), 1);
+                done();
+            }).catch(done);
     });
 
     it('Set scale', function (done) {
         const scale = 0.0002;
-        controls.setScale(scale, 0.28, false).then(() => {
-            assert.equal((viewer.getScale() / scale).toFixed(8), 1);
-            done();
-        });
+        controls.setScale(scale, 0.28, false)
+            .then(() => {
+                assert.equal((viewer.getScale() / scale).toFixed(8), 1);
+                done();
+            }).catch(done);
     });
 
     it('update', function () {
@@ -157,10 +162,11 @@ describe('GlobeControls', function () {
             viewCoords: viewer.eventToViewCoords(event),
             type: 'travel_in',
             direction: 'in',
-        }).then(() => {
-            assert.ok(controls.getRange() < startRange);
-            done();
-        });
+        })
+            .then(() => {
+                assert.ok(controls.getRange() < startRange);
+                done();
+            }).catch(done);
     });
 
     it('travel out', function (done) {
@@ -169,10 +175,11 @@ describe('GlobeControls', function () {
             viewCoords: viewer.eventToViewCoords(event),
             type: 'travel_out',
             direction: 'out',
-        }).then(() => {
-            assert.ok(controls.getRange() > startRange);
-            done();
-        });
+        })
+            .then(() => {
+                assert.ok(controls.getRange() > startRange);
+                done();
+            }).catch(done);
     });
 
     it('touch start', function () {
@@ -192,14 +199,15 @@ describe('GlobeControls', function () {
     });
 
     it('lookAtCoordinate with animation', function (done) {
-        const rig = getRig(viewer.camera.camera3D);
+        const rig = getRig(viewer.camera3D);
         let i;
-        controls.lookAtCoordinate({ coord: placement.coord, time: 10 }, true).then((e) => {
-            assert.equal((e.coord.longitude / placement.coord.longitude).toFixed(8), 1);
-            assert.equal((e.coord.latitude / placement.coord.latitude).toFixed(8), 1);
-            clearInterval(i);
-            done();
-        });
+        controls.lookAtCoordinate({ coord: placement.coord, time: 10 }, true)
+            .then((e) => {
+                assert.equal((e.coord.longitude / placement.coord.longitude).toFixed(8), 1);
+                assert.equal((e.coord.latitude / placement.coord.latitude).toFixed(8), 1);
+                clearInterval(i);
+                done();
+            }).catch(done);
 
         if (rig.animationFrameRequester) {
             i = setInterval(rig.animationFrameRequester, 10);

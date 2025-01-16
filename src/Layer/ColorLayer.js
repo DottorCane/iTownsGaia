@@ -27,22 +27,31 @@ import { deprecatedColorLayerOptions } from 'Core/Deprecated/Undeprecator';
  * @property {number} opacity - property to adjust transparency, opacity is between 0. and 1.
  * @property {boolean} transparent - specify if the layer could be transparent.
  * @property {boolean} noTextureParentOutsideLimit - don't parent texture if it's outside limit.
- * @property {number} effect_type - type effect to apply on raster color.
- * if `effect_type` equals:
- * * `0`: no special effect.
- * * `1`: light color to invisible effect.
- * * `2`: white color to invisible effect.
- * * `3`: custom shader effect (defined `ShaderChunk.customBodyColorLayer` and `ShaderChunk.customHeaderColorLayer`).
- * @property {number} effect_parameter - amount value used with effect applied on raster color.
+ * @property {number} effect_type - type effect to apply on the raster color.
+ * If `effect_type` equals:
+ * * `0`: no effect.
+ * * `1`: light color to invisible effect: transparency effect is stronger for
+ *   light colors (whose distance is closer to white). This effect can be
+ *   amplified by `effect_parameter`.
+ * * `2`: white color to invisible effect: white color is considered as
+ *   transparent.
+ * * `3`: custom shader effect: set `ShaderChunk.customBodyColorLayer` and
+ *   `ShaderChunk.customHeaderColorLayer` to add your own glsl code in
+ *   respectively the color layer function body and at top-level.
+ * @property {number} effect_parameter - value used as parameter of certain type
+ * of effects. If `effect_type` equals:
+ * * `0`: unused.
+ * * `1`: used to amplify the transparency effect.
+ * * `2`: unused.
+ * * `3`: could be used by your own glsl code.
+ *
+ * @extends RasterLayer
  */
 class ColorLayer extends RasterLayer {
     /**
      * A simple layer, usually managing a texture to display on a view. For example,
      * it can be an aerial view of the ground or a simple transparent layer with the
      * roads displayed.
-     *
-     * @constructor
-     * @extends Layer
      *
      * @param {string} id - The id of the layer, that should be unique. It is
      * not mandatory, but an error will be emitted if this layer is added a
@@ -55,13 +64,13 @@ class ColorLayer extends RasterLayer {
      * @param {Source} [config.source] - Description and options of the source.
      * @param {number} [config.magFilter] - How the texture is sampled when a texel covers more than one pixel. [see](https://threejs.org/docs/?q=texture#api/en/textures/Texture.magFilter)
      * @param {number} [config.minFilter] - How the texture is sampled when a texel covers less than one pixel. [see](https://threejs.org/docs/?q=texture#api/en/textures/Texture.minFilter)
-     * @param {number} [effect_type=0] - type effect to apply on raster color.
+     * @param {number} [config.effect_type=0] - type effect to apply on raster color.
      * if `effect_type` equals:
      * * `0`: no special effect.
      * * `1`: light color to invisible effect.
      * * `2`: white color to invisible effect.
      * * `3`: custom shader effect (defined `ShaderChunk.customBodyColorLayer` and `ShaderChunk.customHeaderColorLayer`).
-     * @param {number} [effect_parameter=1.0] - amount value used with effect applied on raster color.
+     * @param {number} [config.effect_parameter=1.0] - amount value used with effect applied on raster color.
      *
      * @example
      * // Create a ColorLayer
@@ -82,14 +91,45 @@ class ColorLayer extends RasterLayer {
      */
     constructor(id, config = {}) {
         deprecatedColorLayerOptions(config);
-        super(id, config);
+
+        const {
+            effect_type = 0,
+            effect_parameter = 1.0,
+            transparent,
+            ...rasterConfig
+        } = config;
+
+        super(id, rasterConfig);
+
+        /**
+         * @type {boolean}
+         * @readonly
+         */
         this.isColorLayer = true;
-        this.style = config.style;
-        this.defineLayerProperty('visible', true);
-        this.defineLayerProperty('opacity', 1.0);
-        this.defineLayerProperty('sequence', 0);
-        this.transparent = config.transparent || (this.opacity < 1.0);
+
+        /**
+         * @type {boolean}
+         */
+        this.visible = true;
+        this.defineLayerProperty('visible', this.visible);
+
+        /**
+         * @type {number}
+         */
+        this.opacity = 1.0;
+        this.defineLayerProperty('opacity', this.opacity);
+
+        /**
+         * @type {number}
+         */
+        this.sequence = 0;
+        this.defineLayerProperty('sequence', this.sequence);
+
+        this.transparent = transparent || (this.opacity < 1.0);
         this.noTextureParentOutsideLimit = config.source ? config.source.isFileSource : false;
+
+        this.effect_type = effect_type;
+        this.effect_parameter = effect_parameter;
 
         // Feature options
         this.buildExtent = true;

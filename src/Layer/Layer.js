@@ -19,7 +19,8 @@ import Style from 'Core/Style';
  * @property {Promise} whenReady - this promise is resolved when the layer is added and all initializations are done.
  * This promise is resolved with this layer.
  * This promise is returned by [View#addLayer]{@link View}.
- * @property {object} [zoom] - This property is used only the layer is attached to [TiledGeometryLayer]{@link TiledGeometryLayer}.
+ * @property {object} [zoom] - This property is used only the layer is attached
+ * to {@link TiledGeometryLayer}.
  * By example,
  * The layer checks the tile zoom level to determine if the layer is visible in this tile.
  *
@@ -38,7 +39,6 @@ class Layer extends THREE.EventDispatcher {
      * another available type of Layer, implement a new one inheriting from this
      * one or use [View#addLayer]{@link View}.
      *
-     * @constructor
      * @protected
      *
      * @param {string} id - The id of the layer, that should be unique. It is
@@ -52,20 +52,21 @@ class Layer extends THREE.EventDispatcher {
      * @param {Source|boolean} config.source - instantiated Source specifies data source to display.
      * if config.source is a boolean, it can only be false. if config.source is false,
      * the layer doesn't need Source (like debug Layer or procedural layer).
-     * @param {StyleOptions|Style} [config.style] - an object that contain any properties
+     * @param {StyleOptions} [config.style] - an object that contain any properties
      * (order, zoom, fill, stroke, point, text or/and icon)
      * and sub properties of a Style (@see {@link StyleOptions}). Or directly a {@link Style} .<br/>
      * When entering a StyleOptions the missing style properties will be look for in the data (if any)
      * what won't be done when you use a Style.
      * @param {number} [config.cacheLifeTime=Infinity] - set life time value in cache.
-     * This value is used for [Cache]{@link Cache} expiration mechanism.
-     * @param {(boolean|Object)} [config.addLabelLayer=false] - Used to tell if this layer has
+     * This value is used for cache expiration mechanism.
+     * @param {(boolean|Object)} [config.addLabelLayer] - Used to tell if this layer has
      * labels to display from its data. For example, it needs to be set to `true`
      * for a layer with vector tiles. If it's `true` a new `LabelLayer` is added and attached to this `Layer`.
-     * You can also configure it with [LabelLayer]{@link LabelLayer} options described below such as: `addLabelLayer: { performance: true }`.
+     * You can also configure it with {@link LabelLayer} options described below such as: `addLabelLayer: { performance: true }`.
      * @param {boolean} [config.addLabelLayer.performance=false] - In case label layer adding, so remove labels that have no chance of being visible.
      * Indeed, even in the best case, labels will never be displayed. By example, if there's many labels.
      * @param {boolean} [config.addLabelLayer.forceClampToTerrain=false] - use elevation layer to clamp label on terrain.
+     * @param {number} [config.subdivisionThreshold=256] - set the texture size and, if applied to the globe, affects the tile subdivision.
      *
      * @example
      * // Add and create a new Layer
@@ -88,57 +89,101 @@ class Layer extends THREE.EventDispatcher {
      * layerToListen.addEventListener('opacity-property-changed', (event) => console.log(event));
      */
     constructor(id, config = {}) {
-        /* istanbul ignore next */
-        if (config.projection) {
-            console.warn('Layer projection parameter is deprecated, use crs instead.');
-            config.crs = config.crs || config.projection;
-        }
+        const {
+            source,
+            name,
+            style = {},
+            subdivisionThreshold = 256,
+            addLabelLayer = false,
+            cacheLifeTime,
+            options = {},
+            updateStrategy,
+            zoom,
+            mergeFeatures = true,
+            crs,
+        } = config;
 
-        if (config.source === undefined || config.source === true) {
-            throw new Error(`Layer ${id} needs Source`);
-        }
         super();
-        if (config.style && !(config.style instanceof Style)) {
-            config.style = new Style(config.style);
-        }
+
+        /**
+         * @type {boolean}
+         * @readonly
+         */
         this.isLayer = true;
 
-        Object.assign(this, config);
-
+        /**
+         * @type {string}
+         * @readonly
+         */
+        this.id = id;
         Object.defineProperty(this, 'id', {
-            value: id,
             writable: false,
         });
 
-        // Default properties
-        this.options = config.options || {};
+        /**
+         * @type {string}
+         */
+        this.name = name;
 
-        if (!this.updateStrategy) {
-            this.updateStrategy = {
-                type: STRATEGY_MIN_NETWORK_TRAFFIC,
-                options: {},
-            };
+        if (source === undefined || source === true) {
+            throw new Error(`Layer ${id} needs Source`);
         }
+        /**
+         * @type {Source}
+         */
+        this.source = source || new Source({ url: 'none' });
+
+        this.crs = crs;
+
+        if (style && !(style instanceof Style)) {
+            if (typeof style.fill?.pattern === 'string') {
+                console.warn('Using style.fill.pattern = { source: Img|url } is adviced');
+                style.fill.pattern = { source: style.fill.pattern };
+            }
+            this.style = new Style(style);
+        } else {
+            this.style = style || new Style();
+        }
+
+        /**
+         * @type {number}
+         */
+        this.subdivisionThreshold = subdivisionThreshold;
+        this.sizeDiagonalTexture =  (2 * (this.subdivisionThreshold * this.subdivisionThreshold)) ** 0.5;
+
+        this.addLabelLayer = addLabelLayer;
+
+        // Default properties
+        this.options = options;
+
+        this.updateStrategy = updateStrategy ?? {
+            type: STRATEGY_MIN_NETWORK_TRAFFIC,
+            options: {},
+        };
 
         this.defineLayerProperty('frozen', false);
 
-        if (config.zoom) {
-            this.zoom = { max: config.zoom.max, min: config.zoom.min || 0 };
-            if (this.zoom.max == undefined) {
-                this.zoom.max = Infinity;
-            }
-        } else {
-            this.zoom = { max: Infinity, min: 0 };
-        }
+        this.zoom = {
+            min: zoom?.min ?? 0,
+            max: zoom?.max ?? Infinity,
+        };
 
         this.info = new InfoLayer(this);
 
-        this.source = this.source || new Source({ url: 'none' });
-
+        /**
+         * @type {boolean}
+         */
         this.ready = false;
 
+        /**
+         * @type {Array<Promise<any>>}
+         * @protected
+         */
         this._promises = [];
 
+        /**
+         * @type {Promise<this>}
+         */
         this.whenReady = new Promise((re, rj) => {
             this._resolve = re;
             this._reject = rj;
@@ -150,12 +195,12 @@ class Layer extends THREE.EventDispatcher {
 
         this._promises.push(this.source.whenReady);
 
-        this.cache = new Cache(config.cacheLifeTime);
+        /**
+         * @type {Cache}
+         */
+        this.cache = new Cache(cacheLifeTime);
 
-        this.mergeFeatures = this.mergeFeatures === undefined ? true : config.mergeFeatures;
-
-        // TODO: verify but this.source.filter seems be always undefined.
-        this.filter = this.filter || this.source.filter;
+        this.mergeFeatures = mergeFeatures;
     }
 
     addInitializationStep() {
@@ -237,15 +282,6 @@ class Layer extends THREE.EventDispatcher {
         }
         return data;
     }
-
-    /**
-     * Determines whether the specified feature is valid data.
-     *
-     * @param      {Feature}  feature  The feature
-     * @returns {Feature} the feature is returned if it's valided
-     */
-    // eslint-disable-next-line
-    isValidData(feature) {}
 
     /**
      * Remove and dispose all objects from layer.

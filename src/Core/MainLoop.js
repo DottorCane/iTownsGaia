@@ -113,7 +113,12 @@ class MainLoop extends EventDispatcher {
                 document.title += ' ⌛';
             }
 
-            requestAnimationFrame((timestamp) => { this.#step(view, timestamp); });
+            // TODO Fix asynchronization between xr and MainLoop render loops.
+            // WebGLRenderer#setAnimationLoop must be used for WebXR projects.
+            // (see WebXR#initializeWebXR).
+            if (!this.gfxEngine.renderer.xr.isPresenting) {
+                requestAnimationFrame((timestamp) => { this.step(view, timestamp); });
+            }
         }
     }
 
@@ -163,7 +168,7 @@ class MainLoop extends EventDispatcher {
         }
     }
 
-    #step(view, timestamp) {
+    step(view, timestamp) {
         const dt = timestamp - this.#lastTimestamp;
         view._executeFrameRequestersRemovals();
 
@@ -193,8 +198,8 @@ class MainLoop extends EventDispatcher {
         // camera matrixWorld.
         // Note: this is required at least because WEBGLRenderer calls
         // camera.updateMatrixWorld()
-        const oldAutoUpdate = view.camera.camera3D.matrixAutoUpdate;
-        view.camera.camera3D.matrixAutoUpdate = false;
+        const oldAutoUpdate = view.camera3D.matrixAutoUpdate;
+        view.camera3D.matrixAutoUpdate = false;
 
         // update data-structure
         this.#update(view, updateSources, dt);
@@ -219,7 +224,7 @@ class MainLoop extends EventDispatcher {
             document.title = document.title.substr(0, document.title.length - 2);
         }
 
-        view.camera.camera3D.matrixAutoUpdate = oldAutoUpdate;
+        view.camera3D.matrixAutoUpdate = oldAutoUpdate;
 
         view.execFrameRequesters(MAIN_LOOP_EVENTS.UPDATE_END, dt, this.#updateLoopRestarted);
     }

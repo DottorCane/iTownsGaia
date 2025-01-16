@@ -20,10 +20,10 @@ export default {
         const max = new THREE.Vector3(coordsMaxPrj.x,coordsMaxPrj.y,coordsMaxPrj.z);
 
         const box = new THREE.Box3(min, max);
-        box.zoom = buffer.extent.zoom;
-        box.col = buffer.extent.col;
-        box.row = buffer.extent.row;
-        box.extent = buffer.extent;
+        box.zoom = options.extent.zoom;
+        box.col = options.extent.col;
+        box.row = options.extent.row;
+        box.extent = options.extent;
 
         const xMin = view.getFloat64(0);
         const yMin = view.getFloat64(8);
@@ -85,7 +85,7 @@ export default {
         geometry.setAttribute('position', new THREE.BufferAttribute(positionsTypedArray, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colorTypedArray, 3, true));
         geometry.boundingBox = box;
-        geometry.inExtent = buffer.extent;
+        geometry.inExtent = options.extent;
         geometry.numFeature = numFeature;
         return Promise.resolve(geometry);
     },

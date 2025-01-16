@@ -3,9 +3,10 @@ import assert from 'assert';
 import TileMesh from 'Core/TileMesh';
 // import PlanarView from 'Core/Prefab/PlanarView';
 import PlanarLayer from 'Core/Prefab/Planar/PlanarLayer';
-import Extent, { globalExtentTMS } from 'Core/Geographic/Extent';
+import Tile from 'Core/Tile/Tile';
+import { globalExtentTMS } from 'Core/Tile/TileGrid';
 import TileProvider from 'Provider/TileProvider';
-import newTileGeometry from 'Core/Prefab/TileBuilder';
+import { newTileGeometry } from 'Core/Prefab/TileBuilder';
 import OBB from 'Renderer/OBB';
 import ElevationLayer from 'Layer/ElevationLayer';
 import Source from 'Source/Source';
@@ -22,7 +23,7 @@ FakeTileMesh.prototype.constructor = FakeTileMesh;
 FakeTileMesh.prototype.findCommonAncestor = TileMesh.prototype.findCommonAncestor;
 
 describe('TileMesh', function () {
-    const extent = new Extent('TMS:3857', 5, 10, 10);
+    const tile = new Tile('EPSG:3857', 5, 10, 10);
     const geom = new THREE.BufferGeometry();
     geom.OBB = new OBB();
 
@@ -79,7 +80,7 @@ describe('TileMesh', function () {
         const paramsGeometry = {
             extent: planarlayer.object3d.children[0].extent,
             level: 0,
-            segment: 260,
+            segments: 260,
             disableSkirt: true,
         };
 
@@ -91,7 +92,7 @@ describe('TileMesh', function () {
         const paramsGeometry2 = {
             extent: planarlayer.object3d.children[0].extent,
             level: 0,
-            segment: (2 ** 16),
+            segments: (2 ** 16),
             disableSkirt: true,
         };
 
@@ -130,14 +131,14 @@ describe('TileMesh', function () {
         const paramsGeometry = {
             extent: planarlayer.object3d.children[0].extent,
             level: 0,
-            segment: 4,
+            segments: 4,
             disableSkirt: true,
         };
 
         newTileGeometry(planarlayer.builder, paramsGeometry).then((r) => {
-            r.geometry._count++;
+            r.geometry.increaseRefCount();
             return newTileGeometry(planarlayer.builder, paramsGeometry).then((r) => {
-                assert.equal(r.geometry._count, 1);
+                assert.equal(r.geometry.refCount, 1);
                 done();
             });
         });
@@ -147,7 +148,7 @@ describe('TileMesh', function () {
         const paramsGeometry = {
             extent: planarlayer.object3d.children[0].extent,
             level: 0,
-            segment: 2,
+            segments: 2,
             disableSkirt: true,
         };
 
@@ -161,7 +162,7 @@ describe('TileMesh', function () {
     it('throw error if there\'s not extent in constructor', () => {
         assert.doesNotThrow(() => {
             // eslint-disable-next-line no-unused-vars
-            const tileMesh = new TileMesh(geom, new THREE.Material(), planarlayer, extent.as('EPSG:3857'), 0);
+            const tileMesh = new TileMesh(geom, new THREE.Material(), planarlayer, tile.toExtent('EPSG:3857'), 0);
         });
         assert.throws(() => {
             // eslint-disable-next-line no-unused-vars
@@ -174,30 +175,30 @@ describe('TileMesh', function () {
     elevationLayer.parent = planarlayer;
 
     const material = new THREE.Material();
-    material.addLayer = () => {};
-    material.setSequenceElevation = () => {};
+    material.addLayer = () => { };
+    material.setSequenceElevation = () => { };
 
-    it('event updatedElevation RasterElevationTile sets TileMesh bounding box ', () => {
-        const tileMesh = new TileMesh(geom, material, planarlayer, extent.as('EPSG:3857'), 0);
+    it('event rasterElevationLevelChanged RasterElevationTile sets TileMesh bounding box ', () => {
+        const tileMesh = new TileMesh(geom, material, planarlayer, tile.toExtent('EPSG:3857'), 0);
         const rasterNode = elevationLayer.setupRasterNode(tileMesh);
         const min = 50;
         const max = 500;
         rasterNode.min = min;
         rasterNode.max = max;
-        rasterNode.dispatchEvent({ type: 'updatedElevation', node: rasterNode });
+        rasterNode.dispatchEvent({ type: 'rasterElevationLevelChanged', node: rasterNode });
         assert.equal(tileMesh.obb.z.min, min);
         assert.equal(tileMesh.obb.z.max, max);
 
         rasterNode.min = null;
         rasterNode.max = null;
-        rasterNode.dispatchEvent({ type: 'updatedElevation', node: rasterNode });
+        rasterNode.dispatchEvent({ type: 'rasterElevationLevelChanged', node: rasterNode });
         assert.equal(tileMesh.obb.z.min, min);
         assert.equal(tileMesh.obb.z.max, max);
     });
 
     it('RasterElevationTile throws error if ElevationLayer.useRgbaTextureElevation is true', () => {
         elevationLayer.useRgbaTextureElevation = true;
-        const tileMesh = new TileMesh(geom, material, planarlayer, extent.as('EPSG:3857'), 0);
+        const tileMesh = new TileMesh(geom, material, planarlayer, tile.toExtent('EPSG:3857'), 0);
         assert.throws(() => {
             elevationLayer.setupRasterNode(tileMesh);
         });
@@ -209,7 +210,7 @@ describe('TileMesh', function () {
         elevationLayer.useColorTextureElevation = true;
         elevationLayer.colorTextureElevationMinZ = 10;
         elevationLayer.colorTextureElevationMaxZ = 100;
-        const tileMesh = new TileMesh(geom, material, planarlayer, extent.as('EPSG:3857'), 0);
+        const tileMesh = new TileMesh(geom, material, planarlayer, tile.toExtent('EPSG:3857'), 0);
         const rasterNode = elevationLayer.setupRasterNode(tileMesh);
         assert.equal(rasterNode.min, elevationLayer.colorTextureElevationMinZ);
         assert.equal(rasterNode.max, elevationLayer.colorTextureElevationMaxZ);
@@ -217,10 +218,10 @@ describe('TileMesh', function () {
 
     it('RasterElevationTile min and max are set by xbil texture', () => {
         delete elevationLayer.useColorTextureElevation;
-        const tileMesh = new TileMesh(geom, material, planarlayer, extent.as('EPSG:3857'), 0);
+        const tileMesh = new TileMesh(geom, material, planarlayer, tile.toExtent('EPSG:3857'), 0);
         const rasterNode = elevationLayer.setupRasterNode(tileMesh);
         const texture = new THREE.Texture();
-        texture.extent = new Extent('TMS:3857', 4, 10, 10);
+        texture.extent = new Tile('EPSG:3857', 4, 10, 10);
         texture.image = {
             width: 3,
             height: 3,

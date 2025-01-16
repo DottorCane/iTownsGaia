@@ -45,7 +45,8 @@ class GaiaGeometryLayer extends GeometryLayer {
         this.octreeDepthLimit = config.octreeDepthLimit || -1;
         this.pointBudget = config.pointBudget || 2000000;
         this.opacity = config.opacity || 1;
-        this.pointSize = config.pointSize === 0 || !isNaN(config.pointSize) ? config.pointSize : 1;
+        this.pointSize = config.pointSize === 0 || !isNaN(config.pointSize) ? config.pointSize : 3;
+        this.source = config.source;
 
         this.minIntensityRange = config.minIntensityRange || 0;
         this.maxIntensityRange = config.maxIntensityRange || 1;
@@ -58,6 +59,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
         this.material.defines = this.material.defines || {};
         this.mode = config.mode || PNTS_MODE.COLOR;
+        console.log("GaiaGeometryLayer");
     }
 
     createPointsElement(geometry){
@@ -171,12 +173,18 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
     }
 
+    update(context, layer, node, parent) {
+        GaiaPoint3DProcessing.update(context, layer, node);
+        //console.log(elt);
+    }
+
     requestLoadTile(extent,dictAllTile){
         var that = this;
         var key = this.calcKeyExtent(extent);
         if (dictAllTile[key]){
             return;
         }
+        console.log("requestLoadTile");
         var promise = this.source.loadData(extent,this);
         if (promise==undefined || promise == null){
             return;
@@ -195,6 +203,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         );
     }
     preUpdate(context, sources) {
+        //console.log(context);
         var camera = context.camera;
         var cameraPosition = camera.camera3D.position;
         var projectionMatrix = camera.camera3D.projectionMatrix;
@@ -349,7 +358,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
 
 
-        this.numElement = 'Point memory: ' + numElement + ' Point show: ' + numElementShow + ' tile total: ' + tileDraw + ' tile visible: ' + tileVisible + ' tile not visible: ' + tileNotVisible + " ";
+        this.numElement = 'Point memory: ' + numElement + ' Point show: ' + numElementShow + ' tile total: ' + tileDraw + ' tile visible: ' + tileVisible + ' tile not visible: ' + tileNotVisible + ' ';
         /*
         for (const tilePoint of this.object3d.children) {
             if (!tilePoint.visible){
@@ -367,6 +376,7 @@ class GaiaGeometryLayer extends GeometryLayer {
     }
 
     postUpdate() {
+
     }
 }
 

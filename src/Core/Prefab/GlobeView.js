@@ -8,7 +8,6 @@ import GlobeLayer from 'Core/Prefab/Globe/GlobeLayer';
 import Atmosphere from 'Core/Prefab/Globe/Atmosphere';
 import CameraUtils from 'Utils/CameraUtils';
 
-import CRS from 'Core/Geographic/Crs';
 import { ellipsoidSizes } from 'Core/Math/Ellipsoid';
 
 /**
@@ -68,7 +67,6 @@ class GlobeView extends View {
     /**
      * Creates a view of a globe.
      *
-     * @constructor
      * @extends View
      *
      * @example <caption><b>Instance GlobeView.</b></caption>
@@ -79,19 +77,11 @@ class GlobeView extends View {
      * }
      * var view = new itowns.GlobeView(viewerDiv, placement);
      *
-     * @example <caption><b>Enable WebGl 1.0 instead of WebGl 2.0.</b></caption>
-     * var viewerDiv = document.getElementById('viewerDiv');
-     * const placement = {
-     *     coord: new itowns.Coordinates('EPSG:4326', 2.351323, 48.856712),
-     *     range: 25000000,
-     * }
-     * var view = new itowns.GlobeView(viewerDiv, placement, {  renderer: { isWebGL2: false } });
-     *
      * @param {HTMLDivElement} viewerDiv - Where to attach the view and display it
      * in the DOM.
      * @param {CameraTransformOptions|Extent} placement - An object to place view
-     * @param {object=} options - See options of {@link View}.
-     * @param {Object} options.controls - See options of {@link GlobeControls}
+     * @param {object} [options] - See options of {@link View}.
+     * @param {Object} [options.controls] - See options of {@link GlobeControls}
      */
     constructor(viewerDiv, placement = {}, options = {}) {
         THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
@@ -99,16 +89,11 @@ class GlobeView extends View {
         super('EPSG:4978', viewerDiv, options);
         this.isGlobeView = true;
 
-        this.camera.camera3D.near = Math.max(15.0, 0.000002352 * ellipsoidSizes.x);
-        this.camera.camera3D.far = ellipsoidSizes.x * 10;
+        this.camera3D.near = Math.max(15.0, 0.000002352 * ellipsoidSizes.x);
+        this.camera3D.far = ellipsoidSizes.x * 10;
 
         const tileLayer = new GlobeLayer('globe', options.object3d, options);
         this.mainLoop.gfxEngine.label2dRenderer.infoTileLayer = tileLayer.info;
-
-        const sun = new THREE.DirectionalLight();
-        sun.position.set(-0.5, 0, 1);
-        sun.updateMatrixWorld(true);
-        this.scene.add(sun);
 
         this.addLayer(tileLayer);
         this.tileLayer = tileLayer;
@@ -121,7 +106,7 @@ class GlobeView extends View {
         }
 
         if (options.noControls) {
-            CameraUtils.transformCameraToLookAtTarget(this, this.camera.camera3D, placement);
+            CameraUtils.transformCameraToLookAtTarget(this, this.camera3D, placement);
         } else {
             this.controls = new GlobeControls(this, placement, options.controls);
             this.controls.handleCollision = typeof (options.handleCollision) !== 'undefined' ? options.handleCollision : true;
@@ -152,11 +137,11 @@ class GlobeView extends View {
             return Promise.reject(new Error('Add Layer type object'));
         }
         if (layer.isColorLayer) {
-            if (!this.tileLayer.tileMatrixSets.includes(CRS.formatToTms(layer.source.crs))) {
+            if (!this.tileLayer.tileMatrixSets.includes(layer.source.crs)) {
                 return layer._reject(`Only ${this.tileLayer.tileMatrixSets} tileMatrixSet are currently supported for color layers`);
             }
         } else if (layer.isElevationLayer) {
-            if (CRS.formatToTms(layer.source.crs) !== this.tileLayer.tileMatrixSets[0]) {
+            if (layer.source.crs !== this.tileLayer.tileMatrixSets[0]) {
                 return layer._reject(`Only ${this.tileLayer.tileMatrixSets[0]} tileMatrixSet is currently supported for elevation layers`);
             }
         }

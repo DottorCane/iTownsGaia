@@ -5,12 +5,13 @@ import Coordinates from 'Core/Geographic/Coordinates';
 import { geoidLayerIsVisible } from 'Layer/GeoidLayer';
 import * as THREE from 'three';
 import Extent from 'Core/Geographic/Extent';
-import PointsMaterial, { MODE } from 'Renderer/PointsMaterial';
+//import PointsMaterial, { MODE } from 'Renderer/PointsMaterial';
 
 const coord = new Coordinates('EPSG:4326', 0, 0, 0);
 
 export default {
     update(context, layer, node) {
+        this.source = layer.source;
         // console.log(`update - context.scheduler.execute, ${layer.id}`);
         if (!node.parent && node.children.length) {
             // if node has been removed dispose three.js resource

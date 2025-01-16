@@ -2,15 +2,21 @@ import Source from 'Source/Source';
 import Fetcher from 'Provider/Fetcher';
 import TMSSource from 'Source/TMSSource';
 import URLBuilder from 'Provider/URLBuilder';
-import Extent, { globalExtentTMS } from 'Core/Geographic/Extent';
-import CRS from 'Core/Geographic/Crs';
+//import Extent, { globalExtentTMS } from 'Core/Geographic/Extent';
+//import CRS from 'Core/Geographic/Crs';
 import Gaia3DParserJSON from 'Parser/Gaia3DParserJSON';
 import Gaia3DParserBinary from 'Parser/Gaia3DParserBinary';
 
 // Source delle Tile3D da Gaia
 
 //  Sistema di riferimento mondiale in gradi
-const extent = new Extent(CRS.tms_4326, 0, 0, 0);
+//const extent = new Extent(CRS.tms_4326, 0, 0, 0);
+//const extent = new Extent('EPSG:4326', [0, 0, 0, 0])
+import { globalExtentTMS } from 'Core/Tile/TileGrid';
+import Tile from 'Core/Tile/Tile';
+
+const _tile = new Tile('EPSG:4326', 0, 0, 0);
+
 
 class Gaia3DPointSource extends TMSSource {
     constructor(source) {
@@ -18,12 +24,17 @@ class Gaia3DPointSource extends TMSSource {
        this.isTMSSource = source.isTMSSource;
        this.url = source.url;
        this.offset = source.offset;
+       this.extent = globalExtentTMS.get(source.crs);
        this.fetcher = Fetcher.arrayBuffer;
        this.parse = Gaia3DParserBinary.parse;
+       console.log("Start: Gaia3DPointSource " + source.url);
     }
 
-
-
+    /*
+    urlFromExtent(tile, url) {
+        console.log("urlFromExtent Gaia2 " + tile);
+        return URLBuilder.xyz(tile, { tileMatrixCallback: this.tileMatrixCallback, url });
+    }*/
     /*
     // Metodo che in base all'extent definisce l'URL da caricare.
     urlFromExtent(extent) {

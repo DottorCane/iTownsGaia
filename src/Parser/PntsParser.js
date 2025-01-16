@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import utf8Decoder from 'Utils/Utf8Decoder';
 
 import C3DTBatchTable from 'Core/3DTiles/C3DTBatchTable';
+
+const utf8Decoder = new TextDecoder();
 
 export default {
     /** @module PntsParser */
@@ -134,6 +135,6 @@ function parseFeatureBinary(array, byteOffset, FTJSONLength) {
 
 function setClassification(point, batchTable) {
     if (!point.geometry) { return; }
-    if (batchTable.content && batchTable.content.Classification) { point.geometry.setAttribute('classification', new THREE.BufferAttribute(new Uint8Array(batchTable.content.Classification), 1, true)); }
+    if (batchTable.content && batchTable.content.Classification) { point.geometry.setAttribute('classification', new THREE.BufferAttribute(new Uint8Array(batchTable.content.Classification), 1)); }
     return point;
 }

@@ -1,4 +1,4 @@
-const assert = require('assert');
+import assert from 'assert';
 
 describe('source_stream_wfs_25d', function _() {
     let result;
@@ -11,9 +11,11 @@ describe('source_stream_wfs_25d', function _() {
     });
 
     it('should pick the correct building', async () => {
-        // test picking
+        // Test picking a feature geometry property from `wfsBuilding` layer.
+        // Picking is done at the given screen coordinates.
         const buildingId = await page.evaluate(() => picking({ x: 97, y: 213 }));
-        assert.equal(buildingId.geojson.id, 'batiment.BATIMENT0000000241634062');
+        assert.ok(buildingId, 'no buildings picked');
+        assert.equal(buildingId.cleabs, 'BATIMENT0000000241634062');
     });
     it('should remove GeometryLayer', async () => {
         const countGeometryLayerStart = await page.evaluate(() => view.getLayers(l => l.isGeometryLayer).length);

@@ -1,9 +1,7 @@
 import Source from 'Source/Source';
 import Cache from 'Core/Scheduler/Cache';
-import CRS from 'Core/Geographic/Crs';
 
 /**
- * @classdesc
  * An object defining the source of a single resource to get from a direct
  * access. It inherits from {@link Source}. There is multiple ways of adding a
  * resource here:
@@ -103,16 +101,12 @@ class FileSource extends Source {
      * @param {Object} source - An object that can contain all properties of a
      * FileSource and {@link Source}. Only `crs` is mandatory, but if it
      * presents in `features` under the property `crs`, it is fine.
-     *
-     * @constructor
      */
     constructor(source) {
-        /* istanbul ignore next */
         if (source.parsedData) {
             console.warn('FileSource parsedData parameter is deprecated, use features instead of.');
             source.features = source.features || source.parsedData;
         }
-        /* istanbul ignore next */
         if (source.projection) {
             console.warn('FileSource projection parameter is deprecated, use crs instead.');
             source.crs = source.crs || source.projection;
@@ -131,7 +125,7 @@ class FileSource extends Source {
         }
 
         // the fake url is for when we use the fetchedData or features mode
-        source.url = source.url || 'fake-file-url';
+        source.url = source.url || 'none';
         super(source);
 
         this.isFileSource = true;
@@ -162,7 +156,7 @@ class FileSource extends Source {
         if (!features) {
             options.out.buildExtent = this.crs != 'EPSG:4978';
             if (options.out.buildExtent) {
-                options.out.forcedExtentCrs = options.out.crs != 'EPSG:4978' ? options.out.crs : CRS.formatToEPSG(this.crs);
+                options.out.forcedExtentCrs = options.out.crs != 'EPSG:4978' ? options.out.crs : this.crs;
             }
             features = this.parser(this.fetchedData, options);
             this._featuresCaches[options.out.crs].setByArray(features, [0]);
@@ -174,10 +168,6 @@ class FileSource extends Source {
                 if (this.extent.crs == data.crs) {
                     this.extent.applyMatrix4(data.matrixWorld);
                 }
-            }
-
-            if (data.isFeatureCollection) {
-                data.setParentStyle(options.out.style);
             }
         });
     }

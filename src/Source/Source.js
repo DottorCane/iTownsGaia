@@ -1,3 +1,4 @@
+import * as CRS from 'Core/Geographic/Crs';
 import Extent from 'Core/Geographic/Extent';
 import GeoJsonParser from 'Parser/GeoJsonParser';
 import KMLParser from 'Parser/KMLParser';
@@ -5,33 +6,16 @@ import GDFParser from 'Parser/GDFParser';
 import GpxParser from 'Parser/GpxParser';
 import GTXParser from 'Parser/GTXParser';
 import ISGParser from 'Parser/ISGParser';
+import VectorTileParser from 'Parser/VectorTileParser';
+import Fetcher from 'Provider/Fetcher';
+import Cache from 'Core/Scheduler/Cache';
 
 import Gaia3DParserJSON from 'Parser/Gaia3DParserJSON';
 import Gaia3DParserBinary from 'Parser/Gaia3DParserBinary';
 
-import VectorTileParser from 'Parser/VectorTileParser';
-import Fetcher from 'Provider/Fetcher';
-import Cache from 'Core/Scheduler/Cache';
-import CRS from 'Core/Geographic/Crs';
-
-//TODO:FIX aggiungo i formati custom
-export const supportedFetchers = new Map([
-    ['image/x-bil;bits=32', Fetcher.textureFloat],
-    ['geojson', Fetcher.json],
-    ['application/json', Fetcher.json],
-    ['application/kml', Fetcher.xml],
-    ['application/gpx', Fetcher.xml],
-    ['application/x-protobuf;type=mapbox-vector', Fetcher.arrayBuffer],
-    ['application/gtx', Fetcher.arrayBuffer],
-    ['application/isg', Fetcher.text],
-    ['application/gdf', Fetcher.text],
-    ['gaiaJSON', Fetcher.json],
-    ['gaiaBinary', Fetcher.arrayBuffer],
-]);
-
-//TODO:FIX aggiungo i formati custom
+/** @private */
 export const supportedParsers = new Map([
-    ['geojson', GeoJsonParser.parse],
+    ['application/geo+json', GeoJsonParser.parse],
     ['application/json', GeoJsonParser.parse],
     ['application/kml', KMLParser.parse],
     ['application/gpx', GpxParser.parse],
@@ -43,21 +27,20 @@ export const supportedParsers = new Map([
     ['gaiaBinary', Gaia3DParserBinary.parse],
 ]);
 
-const noCache = { getByArray: () => {}, setByArray: a => a, clear: () => {} };
+const noCache = { getByArray: () => { }, setByArray: a => a, clear: () => { } };
 
 /**
  * @property {string} crs - data crs projection.
  * @property {boolean} isInverted - This option is to be set to the
  * correct value, true or false (default being false), if the computation of
  * the coordinates needs to be inverted to same scheme as OSM, Google Maps
- * or other system. See [this link]{@link
- * https://alastaira.wordpress.com/2011/07/06/converting-tms-tile-coordinates-to-googlebingosm-tile-coordinates}
+ * or other system. See [this link](
+ * https://alastaira.wordpress.com/2011/07/06/converting-tms-tile-coordinates-to-googlebingosm-tile-coordinates)
  * for more informations.
  *
  */
 class InformationsData {
     constructor(options) {
-        /* istanbul ignore next */
         if (options.projection) {
             console.warn('Source projection parameter is deprecated, use crs instead.');
             options.crs = options.crs || options.projection;
@@ -69,31 +52,22 @@ class InformationsData {
     }
 }
 /**
- * This class describes parsing options.
- * @property {InformationsData|Source} in - data informations contained in the file.
+ * This interface describes parsing options.
+ * @typedef {Object} ParsingOptions
+ * @property {Source} in - data informations contained in the file.
  * @property {FeatureBuildingOptions|Layer} out - options indicates how the features should be built.
  */
-// eslint-disable-next-line
-class /* istanbul ignore next */ ParsingOptions {}
-
-function fetchSourceData(source, extent) {
-    const url = source.urlFromExtent(extent);
-
-    return source.fetcher(url, source.networkOptions).then((f) => {
-        f.extent = extent;
-        return f;
-    }, err => source.handlingError(err));
-}
 
 let uid = 0;
 
 /**
- * @classdesc
  * Sources are object containing informations on how to fetch resources, from a
  * set source.
  *
  * To extend a Source, it is necessary to implement two functions:
  * `urlFromExtent` and `extentInsideLimit`.
+ *
+ * @extends InformationsData
  *
  * @property {boolean} isSource - Used to checkout whether this source is a
  * Source. Default is true. You should not change this, as it is used internally
@@ -108,8 +82,8 @@ let uid = 0;
  * fetched resource. If this property is set, it overrides the chosen fetcher
  * method with `format`.
  * @property {Object} networkOptions - Fetch options (passed directly to
- * `fetch()`), see [the syntax for more information]{@link
- * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax}.
+ * `fetch()`), see [the syntax for more information](
+ * https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/fetch#Syntax).
  * By default, set to `{ crossOrigin: 'anonymous' }`.
  * @property {string} crs - The crs projection of the resources.
  * @property {string} attribution - The intellectual property rights for the
@@ -134,9 +108,6 @@ class Source extends InformationsData {
     /**
      * @param {Object} source - An object that can contain all properties of a
      * Source. Only the `url` property is mandatory.
-     *
-     * @constructor
-     * @extends InformationsData
      */
     constructor(source) {
         super(source);
@@ -150,11 +121,12 @@ class Source extends InformationsData {
 
         this.url = source.url;
         this.format = source.format;
-        this.fetcher = source.fetcher || supportedFetchers.get(source.format) || Fetcher.texture;
-        this.parser = source.parser || supportedParsers.get(source.format) || (d => d);
+        this.fetcher = source.fetcher || Fetcher.get(source.format);
+        this.parser = source.parser || supportedParsers.get(source.format) || ((d, opt) => { d.extent = opt.extent; return d; });
         this.isVectorSource = (source.parser || supportedParsers.get(source.format)) != undefined;
         this.networkOptions = source.networkOptions || { crossOrigin: 'anonymous' };
         this.attribution = source.attribution;
+        /** @type {Promise<any>} */
         this.whenReady = Promise.resolve();
         this._featuresCaches = {};
         if (source.extent && !(source.extent.isExtent)) {
@@ -200,9 +172,12 @@ class Source extends InformationsData {
         let features = cache.getByArray(key);
         if (!features) {
             // otherwise fetch/parse the data
-            features = cache.setByArray(fetchSourceData(this, extent).then(file => this.parser(file, { out, in: this }),
-                err => this.handlingError(err)), key);
-            /* istanbul ignore next */
+            features = cache.setByArray(
+                this.fetcher(this.urlFromExtent(extent), this.networkOptions)
+                    .then(file => this.parser(file, { out, in: this, extent }))
+                    .catch(err => this.handlingError(err)),
+                key);
+
             if (this.onParsedFile) {
                 features.then((feat) => {
                     this.onParsedFile(feat);

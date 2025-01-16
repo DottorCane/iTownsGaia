@@ -15,6 +15,10 @@ different data formats (3dTiles, GeoJSON, Vector Tiles, GPX and much more). A
 complete list of features and supported data formats is [available on the
 wiki](https://github.com/iTowns/itowns/wiki/Supported-Features).
 
+It officially targets the last two major versions of both Firefox, Safari and
+Chromium-based browsers (Chrome, Edge, ...) at the date of each release. Older
+browsers supporting WebGL 2.0 may work but we do not offer support.
+
 ![iTowns screenshot](https://raw.githubusercontent.com/iTowns/itowns.github.io/master/images/itownsReleaseXS.jpg)
 
 ## Documentation and examples
@@ -58,7 +62,7 @@ In your project:
 npm install --save itowns
 ```
 
-This package contains the ES5-compatible sources of iTowns.
+This package contains the ES5-compatible sources of iTowns, up to date with the latest release.
 
 If you're using a module bundler (like wepback), you can directly write
 `require('itowns')` in your code.
@@ -75,8 +79,23 @@ that exposes `itowns` in `window`:
 ### From a release bundle
 
 See our [release page](https://github.com/iTowns/itowns/releases). Note that
-there isn't a lot of support for older version of iTowns, we highly recommand to
+there isn't a lot of support for older version of iTowns, we highly recommend to
 use the last release everytime.
+
+### Try modifications before they are released
+
+If you want to try some features or bug fixes that are planned for the next release, we provide
+a @next version of itowns. You can install it as such :
+
+```bash
+npm install --save itowns@next
+```
+
+To switch back to the version to date with the latest release, you need to run :
+
+```bash
+npm install --save itowns@latest
+```
 
 ## Contributing
 
@@ -92,18 +111,21 @@ Incorporated libraries are published under their original licences.
 
 See [LICENSE.md](LICENSE.md) for more information.
 
-## Support
+## Maintainers
 
 iTowns is an original work from French IGN, [MATIS research
-laboratory](http://recherche.ign.fr/labos/matis/).  It has been funded through
+laboratory](http://recherche.ign.fr/labos/matis/). It has been funded through
 various research programs involving the French National Research Agency, Cap
-Digital, UPMC, Mines ParisTec, CNRS, LCPC.
-
-iTowns is currently maintained by [IGN](http://www.ign.fr) and
-[AtolCD](https://www.atolcd.com), and has been maintained by [Oslandia]() in the
-past. It has also received contributions from people [listed
+Digital, UPMC, Mines ParisTec, CNRS, LCPC and maintained by several organizations
+along the years (IGN, Oslandia, AtolCD, CIRIL Group). It has also received contributions from people [listed
 here](CONTRIBUTORS.md).
 
-[![IGN](https://raw.githubusercontent.com/iTowns/itowns.github.io/master/images/logo_ign.png)](https://www.ign.fr)
-[![AtolCD](https://raw.githubusercontent.com/iTowns/itowns.github.io/master/images/logo_atolcd.jpg)](https://www.atolcd.com)
-[![Oslandia](https://raw.githubusercontent.com/iTowns/itowns.github.io/master/images/logo_oslandia.png)](https://www.oslandia.com)
+iTowns is currently maintained by [IGN](http://www.ign.fr) and
+[CIRIL Group](https://www.cirilgroup.com/en/). 
+
+Contributions in any forms and new contributors and maintainers are welcome. Get in touch with us if you are interested :)
+
+The governance of the project is open and explicited [here](https://github.com/iTowns/itowns-governance).
+
+[![IGN](./img/logo_ign.png)](https://www.ign.fr)
+[![CIRIL Group](./img/CIRIL_Group_logo.png)](https://www.cirilgroup.com/en/)

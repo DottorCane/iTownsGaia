@@ -90,7 +90,6 @@ function onDocumentMouseWheel(event) {
  */
 class FlyControls extends THREE.EventDispatcher {
     /**
-     * @Constructor
      * @param {View} view
      * @param {object} options
      * @param {boolean} options.focusOnClick - whether or not to focus the renderer domElement on click
@@ -100,7 +99,7 @@ class FlyControls extends THREE.EventDispatcher {
         super();
         this.view = view;
         this.options = options;
-        this._camera3D = view.camera.camera3D;
+        this._camera3D = view.camera3D;
         this.moves = new Set();
         this.moveSpeed = 10; // backward or forward move speed in m/s
 

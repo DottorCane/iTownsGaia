@@ -4,7 +4,6 @@ import { InfoTiledGeometryLayer } from 'Layer/InfoLayer';
 import Picking from 'Core/Picking';
 import convertToTile from 'Converter/convertToTile';
 import ObjectRemovalHelper from 'Process/ObjectRemovalHelper';
-import { SIZE_DIAGONAL_TEXTURE } from 'Process/LayeredMaterialNodeProcessing';
 import { ImageryLayers } from 'Layer/Layer';
 import { CACHE_POLICIES } from 'Core/Scheduler/Cache';
 
@@ -16,7 +15,10 @@ const boundingSphereCenter = new THREE.Vector3();
  * @property {boolean} isTiledGeometryLayer - Used to checkout whether this
  * layer is a TiledGeometryLayer. Default is true. You should not change this,
  * as it is used internally for optimisation.
+ * @property {boolean} hideSkirt (default false) - Used to hide the skirt (tile borders).
+ * Useful when the layer opacity < 1
  *
+ * @extends GeometryLayer
  */
 class TiledGeometryLayer extends GeometryLayer {
     /**
@@ -39,13 +41,10 @@ class TiledGeometryLayer extends GeometryLayer {
      * It corresponds at meters by pixel. If the projection tile exceeds a certain pixel size (on screen)
      * then it is subdivided into 4 tiles with a zoom greater than 1.
      *
-     * @constructor
-     * @extends GeometryLayer
-     *
      * @param {string} id - The id of the layer, that should be unique. It is
      * not mandatory, but an error will be emitted if this layer is added a
      * {@link View} that already has a layer going by that id.
-     * @param {THREE.Object3d} object3d - The object3d used to contain the
+     * @param {THREE.Object3D} object3d - The object3d used to contain the
      * geometry of the TiledGeometryLayer. It is usually a `THREE.Group`, but it
      * can be anything inheriting from a `THREE.Object3d`.
      * @param {Array} schemeTile - extents Array of root tiles
@@ -60,19 +59,67 @@ class TiledGeometryLayer extends GeometryLayer {
      * @throws {Error} `object3d` must be a valid `THREE.Object3d`.
      */
     constructor(id, object3d, schemeTile, builder, config) {
-        // cacheLifeTime = CACHE_POLICIES.INFINITE because the cache is handled by the builder
-        config.cacheLifeTime = CACHE_POLICIES.INFINITE;
-        config.source = false;
-        super(id, object3d, config);
+        const {
+            sseSubdivisionThreshold = 1.0,
+            minSubdivisionLevel,
+            maxSubdivisionLevel,
+            maxDeltaElevationLevel,
+            tileMatrixSets,
+            diffuse,
+            showOutline = false,
+            segments,
+            disableSkirt = false,
+            materialOptions,
+            ...configGeometryLayer
+        } = config;
 
+        super(id, object3d, {
+            ...configGeometryLayer,
+            // cacheLifeTime = CACHE_POLICIES.INFINITE because the cache is handled by the builder
+            cacheLifeTime: CACHE_POLICIES.INFINITE,
+            source: false,
+        });
+
+        /**
+         * @type {boolean}
+         * @readonly
+         */
         this.isTiledGeometryLayer = true;
-        // TODO : this should be add in a preprocess method specific to GeoidLayer.
-        this.object3d.geoidHeight = 0;
 
         this.protocol = 'tile';
 
-        this.sseSubdivisionThreshold = this.sseSubdivisionThreshold || 1.0;
+        // TODO : this should be add in a preprocess method specific to GeoidLayer.
+        this.object3d.geoidHeight = 0;
 
+        /**
+         * @type {boolean}
+         */
+        this.disableSkirt = disableSkirt;
+
+        this._hideSkirt = !!config.hideSkirt;
+
+        /**
+         * @type {number}
+         */
+        this.sseSubdivisionThreshold = sseSubdivisionThreshold;
+
+        /**
+         * @type {number}
+         */
+        this.minSubdivisionLevel = minSubdivisionLevel;
+
+        /**
+         * @type {number}
+         */
+        this.maxSubdivisionLevel = maxSubdivisionLevel;
+
+        /**
+         * @type {number}
+         * @deprecated
+         */
+        this.maxDeltaElevationLevel = maxDeltaElevationLevel;
+
+        this.segments = segments;
         this.schemeTile = schemeTile;
         this.builder = builder;
         this.info = new InfoTiledGeometryLayer(this);
@@ -84,6 +131,22 @@ class TiledGeometryLayer extends GeometryLayer {
         if (!this.builder) {
             throw new Error(`Cannot init tiled layer without builder for layer ${this.id}`);
         }
+
+        this.maxScreenSizeNode = this.sseSubdivisionThreshold * (this.sizeDiagonalTexture * 2);
+
+        this.tileMatrixSets = tileMatrixSets;
+
+        this.materialOptions = materialOptions;
+
+        /*
+         * @type {boolean}
+         */
+        this.showOutline = showOutline;
+
+        /**
+         * @type {THREE.Vector3 | undefined}
+         */
+        this.diffuse = diffuse;
 
         this.level0Nodes = [];
         const promises = [];
@@ -97,10 +160,25 @@ class TiledGeometryLayer extends GeometryLayer {
             this.object3d.add(...level0s);
             this.object3d.updateMatrixWorld();
         }));
-
-        this.maxScreenSizeNode = this.sseSubdivisionThreshold * (SIZE_DIAGONAL_TEXTURE * 2);
     }
 
+    get hideSkirt() {
+        return this._hideSkirt;
+    }
+
+    set hideSkirt(value) {
+        if (!this.level0Nodes) {
+            return;
+        }
+        this._hideSkirt = value;
+        for (const node of this.level0Nodes) {
+            node.traverse((obj) => {
+                if (obj.isTileMesh) {
+                    obj.geometry.hideSkirt = value;
+                }
+            });
+        }
+    }
     /**
      * Picking method for this layer. It uses the {@link Picking#pickTilesAt}
      * method.
@@ -398,24 +476,6 @@ class TiledGeometryLayer extends GeometryLayer {
         if (this.maxSubdivisionLevel <= node.level) {
             return false;
         }
-
-        // Prevent to subdivise the node if the current elevation level
-        // we must avoid a tile, with level 20, inherits a level 3 elevation texture.
-        // The induced geometric error is much too large and distorts the SSE
-        const nodeLayer = node.material.getElevationLayer();
-        if (nodeLayer) {
-            const currentTexture = nodeLayer.textures[0];
-            if (currentTexture && currentTexture.extent) {
-                const offsetScale = nodeLayer.offsetScales[0];
-                const ratio = offsetScale.z;
-                // ratio is node size / texture size
-                if (ratio < 1 / 2 ** this.maxDeltaElevationLevel) {
-                    //TODO:Serve per permettere di usare il servizio dell'altezza con scarsa definizione
-                    //return false;
-                }
-            }
-        }
-
         subdivisionVector.setFromMatrixScale(node.matrixWorld);
         boundingSphereCenter.copy(node.boundingSphere.center).applyMatrix4(node.matrixWorld);
         const distance = Math.max(
@@ -433,7 +493,7 @@ class TiledGeometryLayer extends GeometryLayer {
 
         // The screen space error is calculated to have a correct texture display.
         // For the projection of a texture's texel to be less than or equal to one pixel
-        const sse = node.screenSize / (SIZE_DIAGONAL_TEXTURE * 2);
+        const sse = node.screenSize / (this.sizeDiagonalTexture * 2);
 
         return this.sseSubdivisionThreshold < sse;
     }

@@ -2,9 +2,6 @@ import { chooseNextLevelToFetch } from 'Layer/LayerUpdateStrategy';
 import LayerUpdateState from 'Layer/LayerUpdateState';
 import handlingError from 'Process/handlerNodeError';
 
-export const SIZE_TEXTURE_TILE = 256;
-export const SIZE_DIAGONAL_TEXTURE = (2 * (SIZE_TEXTURE_TILE * SIZE_TEXTURE_TILE)) ** 0.5;
-
 function materialCommandQueuePriorityFunction(material) {
     // We know that 'node' is visible because commands can only be
     // issued for visible nodes.
@@ -236,12 +233,15 @@ export function updateLayeredMaterialNodeElevation(context, layer, node, parent)
 }
 
 export function removeLayeredMaterialNodeLayer(layerId) {
+    /**
+     * @param {TileMesh} node - The node to udpate.
+     */
     return function removeLayeredMaterialNodeLayer(node) {
         if (node.material?.removeLayer) {
-            node.material.removeLayer(layerId);
-            if (node.material.elevationLayerIds[0] == layerId) {
+            if (node.material.elevationLayerIds.indexOf(layerId) > -1) {
                 node.setBBoxZ({ min: 0, max: 0 });
             }
+            node.material.removeLayer(layerId);
         }
         if (node.layerUpdateState && node.layerUpdateState[layerId]) {
             delete node.layerUpdateState[layerId];

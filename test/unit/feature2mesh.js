@@ -4,8 +4,9 @@ import assert from 'assert';
 import GeoJsonParser from 'Parser/GeoJsonParser';
 import Feature2Mesh from 'Converter/Feature2Mesh';
 
-const geojson = require('../data/geojson/holes.geojson.json');
-const geojson2 = require('../data/geojson/simple.geojson.json');
+import geojson from '../data/geojson/holes.geojson';
+import geojson2 from '../data/geojson/simple.geojson';
+import geojson3 from '../data/geojson/points.geojson';
 
 proj4.defs('EPSG:3946',
     '+proj=lcc +lat_1=45.25 +lat_2=46.75 +lat_0=46 +lon_0=3 +x_0=1700000 +y_0=5200000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
@@ -25,39 +26,97 @@ function computeAreaOfMesh(mesh) {
     }
     return area;
 }
+function makeTree() {
+    const trunkRadius = 5;
+    const trunkHeight = 20;
+    const topHeight = 10;
+    const root = new THREE.Object3D();
 
+    // Trunk
+    const geometry = new THREE.CylinderGeometry(trunkRadius, trunkRadius, trunkHeight, 32);
+    const material = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
+    const trunk = new THREE.Mesh(geometry, material);
+    trunk.rotateX(Math.PI / 2);
+    trunk.position.z = 10;
+    trunk.updateMatrix();
+    root.add(trunk);
+
+    // Canopy
+    const geometryCanop = new THREE.SphereGeometry(topHeight, topHeight, 10);
+    const materialCanop = new THREE.MeshPhongMaterial({ color: 0x00aa00 });
+    const top = new THREE.Mesh(geometryCanop, materialCanop);
+    top.position.z = trunkHeight - (topHeight / 3) + 10;
+    top.updateMatrix();
+    root.add(top);
+
+    return root;
+}
 describe('Feature2Mesh', function () {
     const parsed = GeoJsonParser.parse(geojson, { in: { crs: 'EPSG:3946' }, out: { crs: 'EPSG:3946', buildExtent: true, mergeFeatures: false, structure: '3d' } });
     const parsed2 = GeoJsonParser.parse(geojson2, { in: { crs: 'EPSG:3946' }, out: { crs: 'EPSG:3946', buildExtent: true, mergeFeatures: false, structure: '3d' } });
+    const parsed3 = GeoJsonParser.parse(geojson3, { in: { crs: 'EPSG:3946' }, out: { crs: 'EPSG:3946', buildExtent: true, mergeFeatures: false, structure: '3d' } });
 
-    it('rect mesh area should match geometry extent', () =>
-        parsed.then((collection) => {
-            const mesh = Feature2Mesh.convert()(collection).meshes;
-            const extentSize = collection.extent.planarDimensions();
+    it('rect mesh area should match geometry extent', function (done) {
+        parsed
+            .then((collection) => {
+                const mesh = Feature2Mesh.convert()(collection).meshes;
+                const extentSize = collection.extent.planarDimensions();
 
-            assert.equal(
-                extentSize.x * extentSize.y,
-                computeAreaOfMesh(mesh.children[0]));
-        }));
+                assert.equal(
+                    extentSize.x * extentSize.y,
+                    computeAreaOfMesh(mesh.children[0]));
+                done();
+            }).catch(done);
+    });
 
-    it('square mesh area should match geometry extent minus holes', () =>
-        parsed.then((collection) => {
-            const mesh = Feature2Mesh.convert()(collection).meshes;
+    it('square mesh area should match geometry extent minus holes', function (done) {
+        parsed
+            .then((collection) => {
+                const mesh = Feature2Mesh.convert()(collection).meshes;
 
-            const noHoleArea = computeAreaOfMesh(mesh.children[0]);
-            const holeArea = computeAreaOfMesh(mesh.children[1]);
-            const meshWithHoleArea = computeAreaOfMesh(mesh.children[2]);
+                const noHoleArea = computeAreaOfMesh(mesh.children[0]);
+                const holeArea = computeAreaOfMesh(mesh.children[1]);
+                const meshWithHoleArea = computeAreaOfMesh(mesh.children[2]);
 
-            assert.equal(
-                noHoleArea - holeArea,
-                meshWithHoleArea);
-        }));
+                assert.equal(
+                    noHoleArea - holeArea, meshWithHoleArea,
+                );
+                done();
+            }).catch(done);
+    });
 
-    it('convert points, lines and mesh', () =>
-        parsed2.then((collection) => {
-            const mesh = Feature2Mesh.convert()(collection).meshes;
-            assert.equal(mesh.children[0].type, 'Points');
-            assert.equal(mesh.children[1].type, 'Line');
-            assert.equal(mesh.children[2].type, 'Mesh');
-        }));
+    it('convert points, lines and mesh', function (done) {
+        parsed2
+            .then((collection) => {
+                const mesh = Feature2Mesh.convert()(collection).meshes;
+                assert.equal(mesh.children[0].type, 'Points');
+                assert.equal(mesh.children[1].type, 'LineSegments');
+                assert.equal(mesh.children[2].type, 'Mesh');
+                done();
+            }).catch(done);
+    });
+
+    it('convert to instanced meshes', function (done) {
+        const styleModel3D = {
+            point: {
+                model: { object: makeTree() },
+            },
+        };
+        parsed3
+            .then((collection) => {
+                const mesh = Feature2Mesh.convert({ style: styleModel3D })(collection).meshes;
+
+                let isInstancedMesh = false;
+                mesh.traverse((obj) => {
+                    if (obj.isInstancedMesh) {
+                        isInstancedMesh = true;
+                        return null;
+                    }
+                },
+                );
+                assert.ok(isInstancedMesh);
+                assert.equal(mesh.children.length, 3);
+                done();
+            }).catch(done);
+    });
 });

@@ -1,10 +1,41 @@
 import Source from 'Source/Source';
 import URLBuilder from 'Provider/URLBuilder';
+import Extent from 'Core/Geographic/Extent';
+import * as CRS from 'Core/Geographic/Crs';
+
+const _extent = new Extent('EPSG:4326', [0, 0, 0, 0]);
 
 /**
- * @classdesc
+ * Proj provides an optional param to define axis order and orientation for a
+ * given projection. 'enu' for instance stands for east, north, up.
+ * Elevation is not needed here. The two first characters are sufficient to map
+ * proj axis to iTowns bbox order formalism.
+ * 'enu' corresponds to 'wsen' because bbox starts by lower value coordinates
+ * and preserves axis ordering, here long/lat.
+ */
+const projAxisToBboxMappings = {
+    en: 'wsen',
+    es: 'wnes',
+    wn: 'eswn',
+    ws: 'enws',
+    ne: 'swne',
+    se: 'nwse',
+    nw: 'senw',
+    sw: 'nesw',
+};
+
+/**
+ * Provides the bbox axis order matching provided proj4 axis
+ * @param {string} projAxis the CRS axis order as defined in proj4
+ * @returns {string} the corresponding bbox axis order to use for WMS 1.3.0
+ */
+function projAxisToWmsBbox(projAxis) {
+    return projAxis && projAxisToBboxMappings[projAxis.slice(0, 2)] || 'wsen';
+}
+
+/**
  * An object defining the source of images to get from a
- * [WMS]{@link http://www.opengeospatial.org/standards/wms} server. It inherits
+ * [WMS](http://www.opengeospatial.org/standards/wms) server. It inherits
  * from {@link Source}.
  *
  * @extends Source
@@ -33,9 +64,10 @@ import URLBuilder from 'Provider/URLBuilder';
  * is 0.
  * @property {number} zoom.max - The maximum level of the source. Default value
  * is 21.
+ * @property {string} bboxDigits - The bbox digits precision used in URL
  * @property {Object} vendorSpecific - An object containing vendor specific
- * parameters. See for example a [list of these parameters for GeoServer]{@link
- * https://docs.geoserver.org/latest/en/user/services/wms/vendor.html}. This
+ * parameters. See for example a [list of these parameters for GeoServer](
+ * https://docs.geoserver.org/latest/en/user/services/wms/vendor.html). This
  * object is read simply with the `key` being the name of the parameter and
  * `value` being the value of the parameter. If used, this property should be
  * set in the constructor parameters.
@@ -70,8 +102,6 @@ class WMSSource extends Source {
      * @param {Object} source - An object that can contain all properties of
      * WMSSource and {@link Source}. `url`, `name`, `extent` and `crs`
      * are mandatory.
-     *
-     * @constructor
      */
     constructor(source) {
         if (!source.name) {
@@ -92,7 +122,6 @@ class WMSSource extends Source {
 
         this.isWMSSource = true;
         this.name = source.name;
-        this.layersVisibility = source.name;
         this.zoom = { min: 0, max: Infinity };
         this.style = source.style || '';
 
@@ -100,73 +129,52 @@ class WMSSource extends Source {
         this.height = source.height || source.width || 256;
         this.version = source.version || '1.3.0';
         this.transparent = source.transparent || false;
+        this.bboxDigits = source.bboxDigits;
 
-        if (!source.axisOrder) {
-        // 4326 (lat/long) axis order depends on the WMS version used
-            if (this.crs == 'EPSG:4326') {
-            // EPSG 4326 x = lat, long = y
-            // version 1.1.0 long/lat while version 1.3.0 mandates xy (so lat,long)
-                this.axisOrder = (this.version === '1.1.0' ? 'wsen' : 'swne');
-            } else {
-            // xy,xy order
-                this.axisOrder = 'wsen';
-            }
+        if (source.axisOrder) {
+            this.axisOrder = source.axisOrder;
+        } else if (this.version === '1.3.0') { // If not set, axis order depends on WMS version
+            // Version 1.3.0 depends on CRS axis order as defined in epsg.org database
+            this.axisOrder = projAxisToWmsBbox(CRS.axisOrder(this.crs));
+        } else {
+            // Versions 1.X.X mandate long/lat order, east-north orientation
+            this.axisOrder = 'wsen';
         }
 
         const crsPropName = (this.version === '1.3.0') ? 'CRS' : 'SRS';
 
-        // Add ? at the end of the url if it is not already in the given URL
-        if (!this.url.endsWith('?')) {
-            this.url = `${this.url}?`;
-        }
-        /*
-        this.url = `${this.url}SERVICE=WMS&REQUEST=GetMap&LAYERS=${
-            this.name}&VERSION=${
-            this.version}&STYLES=${
-            this.style}&FORMAT=${
-            this.format}&TRANSPARENT=${
-            this.transparent}&BBOX=%bbox&${
-            crsPropName}=${
-            this.crs}&WIDTH=${this.width}&HEIGHT=${this.height}`;
-        */
-        this.url = `${this.url}SERVICE=WMS&REQUEST=GetMap&LAYERS=%layers%&VERSION=${
-            this.version}&STYLES=${
-            this.style}&FORMAT=${
-            this.format}&TRANSPARENT=${
-            this.transparent}&BBOX=%bbox&${
-            crsPropName}=${
-            this.crs}&WIDTH=${this.width}&HEIGHT=${this.height}`;
+        const urlObj = new URL(this.url);
+        urlObj.searchParams.set('SERVICE', 'WMS');
+        urlObj.searchParams.set('REQUEST', 'GetMap');
+        urlObj.searchParams.set('LAYERS', this.name);
+        urlObj.searchParams.set('VERSION', this.version);
+        urlObj.searchParams.set('STYLES', this.style);
+        urlObj.searchParams.set('FORMAT', this.format);
+        urlObj.searchParams.set('TRANSPARENT', this.transparent);
+        urlObj.searchParams.set('BBOX', '%bbox');
+        urlObj.searchParams.set(crsPropName, this.crs);
+        urlObj.searchParams.set('WIDTH', this.width);
+        urlObj.searchParams.set('HEIGHT', this.height);
 
         this.vendorSpecific = source.vendorSpecific;
         for (const name in this.vendorSpecific) {
             if (Object.prototype.hasOwnProperty.call(this.vendorSpecific, name)) {
-                this.url = `${this.url}&${name}=${this.vendorSpecific[name]}`;
+                urlObj.searchParams.set(name, this.vendorSpecific[name]);
             }
         }
+
+        this.url = decodeURIComponent(urlObj.toString());
     }
 
-    urlFromExtent(extent) {
-        var url =  URLBuilder.bbox(extent, this);
-        return url.replace('%layers%',this.layersVisibility);
+    urlFromExtent(extentOrTile) {
+        const extent = extentOrTile.isExtent ?
+            extentOrTile.as(this.crs, _extent) :
+            extentOrTile.toExtent(this.crs, _extent);
+        return URLBuilder.bbox(extent, this);
     }
 
     extentInsideLimit(extent) {
-        var extentA = extent;
-        var other = this.extent;
-
-        var result1 = !(extentA.west >= other.east || extentA.east <= other.west || extentA.south >= other.north || extentA.north <= other.south);
-
-        var intersectX = extentA.west <= other.east && extentA.east >= other.west;
-        var intersectY = extentA.south <= other.north && extentA.north >= other.south;
-
-        var result2 = false;
-        if (intersectX && intersectY) {
-            result2 = true;
-        }
-
-        //console.log(result1 + " " + result2);
-
-        return  this.extent.intersectsExtent(extent);
+        return this.extent.intersectsExtent(extent);
     }
 }
 

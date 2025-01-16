@@ -3,16 +3,15 @@ import assert from 'assert';
 import GlobeView from 'Core/Prefab/GlobeView';
 import FeatureGeometryLayer from 'Layer/FeatureGeometryLayer';
 import FileSource from 'Source/FileSource';
-import HttpsProxyAgent from 'https-proxy-agent';
 import Extent from 'Core/Geographic/Extent';
 import Coordinates from 'Core/Geographic/Coordinates';
 import OBB from 'Renderer/OBB';
 import TileMesh from 'Core/TileMesh';
 import Renderer from './bootstrap';
 
-const geojson_big = require('../data/geojson/map_big.geojson.json');
-const geojson_a = require('../data/geojson/map.geojson.json');
-const geojson_small = require('../data/geojson/map_small.geojson.json');
+import geojson_big from '../data/geojson/map_big.geojson';
+import geojson_a from '../data/geojson/map.geojson';
+import geojson_small from '../data/geojson/map_small.geojson';
 
 const files = [geojson_small, geojson_a, geojson_big];
 const errors = [3e-4, 5e-2, 35];
@@ -30,7 +29,6 @@ files.forEach((geojson, i) => {
             fetchedData: geojson,
             crs: 'EPSG:4326',
             format: 'application/json',
-            networkOptions: process.env.HTTPS_PROXY ? { agent: new HttpsProxyAgent(process.env.HTTPS_PROXY) } : {},
         });
 
         const source2 = new FileSource(source);
@@ -65,57 +63,59 @@ files.forEach((geojson, i) => {
         viewer.addLayer(layerNoProj4);
 
         it('update proj4', function (done) {
-            layerProj4.whenReady.then(() => {
-                tile.visible = true;
-                layerProj4.update(context, layerProj4, tile)
-                    .then(() => {
-                        assert.equal(layerProj4.object3d.children.length, 1);
-                        done();
-                    });
-            });
+            layerProj4.whenReady
+                .then(() => {
+                    tile.visible = true;
+                    return layerProj4.update(context, layerProj4, tile);
+                })
+                .then(() => {
+                    assert.equal(layerProj4.object3d.children.length, 1);
+                    done();
+                }).catch(done);
         });
 
         it('update without proj4', function (done) {
-            layerNoProj4.whenReady.then(() => {
-                tile.visible = true;
-                context.layer = layerNoProj4;
-                layerNoProj4.update(context, layerNoProj4, tile)
-                    .then(() => {
-                        assert.equal(layerNoProj4.object3d.children.length, 1);
-                        done();
-                    });
-            });
+            layerNoProj4.whenReady
+                .then(() => {
+                    tile.visible = true;
+                    return layerNoProj4.update(context, layerNoProj4, tile);
+                })
+                .then(() => {
+                    assert.equal(layerNoProj4.object3d.children.length, 1);
+                    done();
+                }).catch(done);
         });
 
         it(`parsing error without proj4 should be inferior to ${max_error} meter`, function (done) {
-            Promise.all([layerNoProj4.whenReady, layerProj4.whenReady]).then(() => {
-                const meshNoProj4 = layerNoProj4.object3d.children[0].meshes.children[0];
-                const mesh = layerProj4.object3d.children[0].meshes.children[0];
-                const array = mesh.geometry.attributes.position.array;
-                const arrayNoProj4 = meshNoProj4.geometry.attributes.position.array;
-                const vectorNoProj4 = new THREE.Vector3();
-                const vectorProj4 = new THREE.Vector3();
-                let error = 0;
+            Promise.all([layerNoProj4.whenReady, layerProj4.whenReady])
+                .then(() => {
+                    const meshNoProj4 = layerNoProj4.object3d.children[0].meshes.children[0];
+                    const mesh = layerProj4.object3d.children[0].meshes.children[0];
+                    const array = mesh.geometry.attributes.position.array;
+                    const arrayNoProj4 = meshNoProj4.geometry.attributes.position.array;
+                    const vectorNoProj4 = new THREE.Vector3();
+                    const vectorProj4 = new THREE.Vector3();
+                    let error = 0;
 
-                for (var i = array.length - 3; i >= 0; i -= 3) {
-                    // transform proj4 vertex to final projection
-                    vectorProj4.fromArray(array, i);
-                    vectorProj4.applyMatrix4(mesh.matrixWorld);
+                    for (let i = array.length - 3; i >= 0; i -= 3) {
+                        // transform proj4 vertex to final projection
+                        vectorProj4.fromArray(array, i);
+                        vectorProj4.applyMatrix4(mesh.matrixWorld);
 
-                    // transform proj4 vertex to final projection
-                    vectorNoProj4.fromArray(arrayNoProj4, i);
-                    vectorNoProj4.applyMatrix4(meshNoProj4.matrixWorld);
+                        // transform proj4 vertex to final projection
+                        vectorNoProj4.fromArray(arrayNoProj4, i);
+                        vectorNoProj4.applyMatrix4(meshNoProj4.matrixWorld);
 
-                    // compute diff between proj4 vertex and no proj4 vertex
-                    const distance = vectorProj4.distanceTo(vectorNoProj4);
-                    error += distance;
-                }
+                        // compute diff between proj4 vertex and no proj4 vertex
+                        const distance = vectorProj4.distanceTo(vectorNoProj4);
+                        error += distance;
+                    }
 
-                error /= (array.length / 3);
+                    error /= (array.length / 3);
 
-                assert.ok(error < max_error);
-                done();
-            });
+                    assert.ok(error < max_error, `error (${error}) sup. to ${max_error}`);
+                    done();
+                }).catch(done);
         });
     });
 });

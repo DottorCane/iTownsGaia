@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import * as CRS from 'Core/Geographic/Crs';
 import Camera from 'Renderer/Camera';
+import initializeWebXR from 'Renderer/WebXR';
 import MainLoop, { MAIN_LOOP_EVENTS, RENDERING_PAUSED } from 'Core/MainLoop';
 import Capabilities from 'Core/System/Capabilities';
 import { COLOR_LAYERS_ORDER_CHANGED } from 'Renderer/ColorLayersOrdering';
 import c3DEngine from 'Renderer/c3DEngine';
 import RenderMode from 'Renderer/RenderMode';
-import CRS from 'Core/Geographic/Crs';
 import Coordinates from 'Core/Geographic/Coordinates';
 import FeaturesUtils from 'Utils/FeaturesUtils';
 import { getMaxColorSamplerUnitsCount } from 'Renderer/LayeredMaterial';
@@ -31,6 +32,7 @@ export const VIEW_EVENTS = {
     INITIALIZED: 'initialized',
     COLOR_LAYERS_ORDER_CHANGED,
     CAMERA_MOVED: 'camera-moved',
+    DISPOSED: 'disposed',
 };
 
 /**
@@ -53,7 +55,7 @@ function _preprocessLayer(view, layer, parentLayer) {
         // Find crs projection layer, this is projection destination
         layer.crs = view.referenceCrs;
     } else if (!layer.crs) {
-        if (parentLayer && parentLayer.tileMatrixSets && parentLayer.tileMatrixSets.includes(CRS.formatToTms(source.crs))) {
+        if (parentLayer && parentLayer.tileMatrixSets && parentLayer.tileMatrixSets.includes(source.crs)) {
             layer.crs = source.crs;
         } else {
             layer.crs = parentLayer && parentLayer.extent.crs;
@@ -101,6 +103,10 @@ function _preprocessLayer(view, layer, parentLayer) {
         });
     }
 
+    if (layer.isOGC3DTilesLayer) {
+        layer._setup(view);
+    }
+
     return layer;
 }
 const _eventCoords = new THREE.Vector2();
@@ -114,6 +120,18 @@ const viewers = [];
 // Size of the camera frustrum, in meters
 let screenMeters;
 
+let id = 0;
+
+/**
+ * @property {number} id - The id of the view. It's incremented at each new view instance, starting at 0.
+ * @property {HTMLElement} domElement - The domElement holding the canvas where the view is displayed
+ * @property {String} referenceCrs - The coordinate reference system of the view
+ * @property {MainLoop} mainLoop - itowns mainloop scheduling the operations
+ * @property {THREE.Scene} scene - threejs scene of the view
+ * @property {Camera} camera - itowns camera (that holds a threejs camera that is directly accessible with View.camera3D)
+ * @property {THREE.Camera} camera3D - threejs camera that is stored in itowns camera
+ * @property {THREE.WebGLRenderer} renderer - threejs webglrenderer rendering this view
+ */
 class View extends THREE.EventDispatcher {
     #layers = [];
     #pixelDepthBuffer = new Uint8Array(4);
@@ -129,23 +147,23 @@ class View extends THREE.EventDispatcher {
      * @example <caption><b>Create a view with an orthographic camera, and grant it with Three.js custom controls.</b></caption>
      * var viewerDiv = document.getElementById('viewerDiv');
      * var view = itowns.View('EPSG:4326', viewerDiv, { camera: { type: itowns.CAMERA_TYPE.ORTHOGRAPHIC } });
-     * var customControls = itowns.THREE.OrbitControls(view.camera.camera3D, viewerDiv);
+     * var customControls = itowns.THREE.OrbitControls(view.camera3D, viewerDiv);
      *
-     * @param {string} crs - The default CRS of Three.js coordinates. Should be a cartesian CRS.
+     * @param {String} crs - The default CRS of Three.js coordinates. Should be a cartesian CRS.
      * @param {HTMLElement} viewerDiv - Where to instanciate the Three.js scene in the DOM
-     * @param {Object=} options - Optional properties.
-     * @param {object} [options.camera] - Options for the camera associated to the view. See {@link Camera} options.
-     * @param {?MainLoop} options.mainLoop - {@link MainLoop} instance to use, otherwise a default one will be constructed
-     * @param {?(WebGLRenderer|object)} options.renderer - {@link WebGLRenderer} instance to use, otherwise
+     * @param {Object} [options] - Optional properties.
+     * @param {Object} [options.camera] - Options for the camera associated to the view. See {@link Camera} options.
+     * @param {MainLoop} [options.mainLoop] - {@link MainLoop} instance to use, otherwise a default one will be constructed
+     * @param {WebGLRenderer|Object} [options.renderer] - {@link WebGLRenderer} instance to use, otherwise
      * a default one will be constructed. In this case, if options.renderer is an object, it will be used to
      * configure the renderer (see {@link c3DEngine}.  If not present, a new &lt;canvas> will be created and
      * added to viewerDiv (mutually exclusive with mainLoop)
-     * @param {?Scene} [options.scene3D] - [THREE.Scene](https://threejs.org/docs/#api/en/scenes/Scene) instance to use, otherwise a default one will be constructed
-     * @param {?Color} options.diffuse - [THREE.Color](https://threejs.org/docs/?q=color#api/en/math/Color) Diffuse color terrain material.
+     * @param {Object} [options.webXR] - enable webxr button to switch on VR visualization.
+     * @param {number} [options.webXR.scale=1.0] - apply webxr scale tranformation.
+     * @param {Scene} [options.scene3D] - [THREE.Scene](https://threejs.org/docs/#api/en/scenes/Scene) instance to use, otherwise a default one will be constructed
+     * @param {Color} [options.diffuse] - [THREE.Color](https://threejs.org/docs/?q=color#api/en/math/Color) Diffuse color terrain material.
      * This color is applied to terrain if there isn't color layer on terrain extent (by example on pole).
      * @param {boolean} [options.enableFocusOnStart=true] - enable focus on dom element on start.
-     *
-     * @constructor
      */
     constructor(crs, viewerDiv, options = {}) {
         if (!viewerDiv) {
@@ -155,6 +173,7 @@ class View extends THREE.EventDispatcher {
         super();
 
         this.domElement = viewerDiv;
+        this.id = id++;
 
         this.referenceCrs = crs;
 
@@ -239,6 +258,26 @@ class View extends THREE.EventDispatcher {
 
         // push all viewer to keep source.cache
         viewers.push(this);
+
+        if (options.webXR) {
+            initializeWebXR(this, options.webXR);
+        }
+    }
+
+    /**
+     * Get the Threejs renderer used to render this view.
+     * @returns {THREE.WebGLRenderer} the WebGLRenderer used to render this view.
+     */
+    get renderer() {
+        return this.mainLoop?.gfxEngine?.getRenderer();
+    }
+
+    /**
+     * Get the threejs Camera of this view
+     * @returns {THREE.Camera} the threejs camera of this view
+     */
+    get camera3D() {
+        return this.camera?.camera3D;
     }
 
     /**
@@ -269,8 +308,6 @@ class View extends THREE.EventDispatcher {
         }
         // remove alls frameRequester
         this.removeAllFrameRequesters();
-        // remove alls events
-        this.removeAllEvents();
         // remove all layers
         const layers = this.getLayers(l => !l.isTiledGeometryLayer && !l.isAtmosphere);
         for (const layer of layers) {
@@ -287,6 +324,9 @@ class View extends THREE.EventDispatcher {
         viewers.splice(id, 1);
         // Remove remaining objects in the scene (e.g. helpers, debug, etc.)
         this.scene.traverse(ObjectRemovalHelper.cleanup);
+        this.dispatchEvent({ type: VIEW_EVENTS.DISPOSED });
+        // remove alls events
+        this.removeAllEvents();
     }
 
     /**
@@ -324,9 +364,6 @@ class View extends THREE.EventDispatcher {
                 } else {
                     return layer._reject(new Error(`Cant add color layer ${layer.id}: the maximum layer is reached`));
                 }
-            } else if (layer.isElevationLayer && layer.source.format == 'image/x-bil;bits=32') {
-                layer.source.networkOptions.isWebGL2 = this.mainLoop.gfxEngine.renderer.capabilities.isWebGL2;
-                parentLayer.attach(layer);
             } else {
                 parentLayer.attach(layer);
             }
@@ -428,7 +465,8 @@ class View extends THREE.EventDispatcher {
     notifyChange(changeSource = undefined, needsRedraw = true) {
         if (changeSource) {
             this._changeSources.add(changeSource);
-            if ((changeSource.isTileMesh || changeSource.isCamera)) {
+            if (!this.mainLoop.gfxEngine.renderer.xr.isPresenting
+                && (changeSource.isTileMesh || changeSource.isCamera)) {
                 this.#fullSizeDepthBuffer.needsUpdate = true;
             }
         }
@@ -758,7 +796,7 @@ class View extends THREE.EventDispatcher {
      * @return {number} The zoom scale.
      */
     getScale(pitch = 0.28) {
-        if (this.camera.camera3D.isOrthographicCamera) {
+        if (this.camera3D.isOrthographicCamera) {
             return pitch * 1E-3 / this.getPixelsToMeters();
         }
         return this.getScaleFromDistance(pitch, this.getDistanceFromCamera());
@@ -766,7 +804,7 @@ class View extends THREE.EventDispatcher {
 
     getScaleFromDistance(pitch = 0.28, distance = 1) {
         pitch /= 1000;
-        const fov = THREE.MathUtils.degToRad(this.camera.camera3D.fov);
+        const fov = THREE.MathUtils.degToRad(this.camera3D.fov);
         const unit = this.camera.height / (2 * distance * Math.tan(fov * 0.5));
         return pitch * unit;
     }
@@ -782,7 +820,7 @@ class View extends THREE.EventDispatcher {
      */
     getDistanceFromCamera(screenCoord) {
         this.getPickingPositionFromDepth(screenCoord, positionVector);
-        return this.camera.camera3D.position.distanceTo(positionVector);
+        return this.camera3D.position.distanceTo(positionVector);
     }
 
     /**
@@ -796,8 +834,8 @@ class View extends THREE.EventDispatcher {
      * @return {number} The projected distance in meters.
      */
     getPixelsToMeters(pixels = 1, screenCoord) {
-        if (this.camera.camera3D.isOrthographicCamera) {
-            screenMeters = (this.camera.camera3D.right - this.camera.camera3D.left) / this.camera.camera3D.zoom;
+        if (this.camera3D.isOrthographicCamera) {
+            screenMeters = (this.camera3D.right - this.camera3D.left) / this.camera3D.zoom;
             return pixels * screenMeters / this.camera.width;
         }
         return this.getPixelsToMetersFromDistance(pixels, this.getDistanceFromCamera(screenCoord));
@@ -818,8 +856,8 @@ class View extends THREE.EventDispatcher {
      * @return {number} The projected distance in pixels.
      */
     getMetersToPixels(meters = 1, screenCoord) {
-        if (this.camera.camera3D.isOrthographicCamera) {
-            screenMeters = (this.camera.camera3D.right - this.camera.camera3D.left) / this.camera.camera3D.zoom;
+        if (this.camera3D.isOrthographicCamera) {
+            screenMeters = (this.camera3D.right - this.camera3D.left) / this.camera3D.zoom;
             return meters * this.camera.width / screenMeters;
         }
         return this.getMetersToPixelsFromDistance(meters, this.getDistanceFromCamera(screenCoord));
@@ -989,7 +1027,6 @@ class View extends THREE.EventDispatcher {
         const viewPaused = l.scheduler.commandsWaitingExecutionCount() == 0 && l.renderingState == RENDERING_PAUSED;
         const g = l.gfxEngine;
         const dim = g.getWindowSize();
-        const camera = this.camera.camera3D;
 
         mouse = mouse || dim.clone().multiplyScalar(0.5);
         mouse.x = Math.floor(mouse.x);
@@ -1011,15 +1048,15 @@ class View extends THREE.EventDispatcher {
         screen.x = (mouse.x / dim.x) * 2 - 1;
         screen.y = -(mouse.y / dim.y) * 2 + 1;
 
-        if (Capabilities.isLogDepthBufferSupported() && camera.type == 'PerspectiveCamera') {
+        if (Capabilities.isLogDepthBufferSupported() && this.camera3D.type == 'PerspectiveCamera') {
             // TODO: solve this part with gl_FragCoord_Z and unproject
             // Origin
-            ray.origin.copy(camera.position);
+            ray.origin.copy(this.camera3D.position);
 
             // Direction
             ray.direction.set(screen.x, screen.y, 0.5);
             // Unproject
-            matrix.multiplyMatrices(camera.matrixWorld, matrix.copy(camera.projectionMatrix).invert());
+            matrix.multiplyMatrices(this.camera3D.matrixWorld, matrix.copy(this.camera3D.projectionMatrix).invert());
             ray.direction.applyMatrix4(matrix);
             ray.direction.sub(ray.origin);
 
@@ -1028,14 +1065,14 @@ class View extends THREE.EventDispatcher {
             direction.sub(ray.origin);
 
             const angle = direction.angleTo(ray.direction);
-            const orthoZ = g.depthBufferRGBAValueToOrthoZ(buffer, camera);
+            const orthoZ = g.depthBufferRGBAValueToOrthoZ(buffer, this.camera3D);
             const length = orthoZ / Math.cos(angle);
-            target.addVectors(camera.position, ray.direction.setLength(length));
+            target.addVectors(this.camera3D.position, ray.direction.setLength(length));
         } else {
-            const gl_FragCoord_Z = g.depthBufferRGBAValueToOrthoZ(buffer, camera);
+            const gl_FragCoord_Z = g.depthBufferRGBAValueToOrthoZ(buffer, this.camera3D);
 
             target.set(screen.x, screen.y, gl_FragCoord_Z);
-            target.unproject(camera);
+            target.unproject(this.camera3D);
         }
 
         if (target.length() > 10000000) { return undefined; }
@@ -1121,7 +1158,7 @@ class View extends THREE.EventDispatcher {
         this.mainLoop.gfxEngine.onWindowResize(width, height);
         if (width !== 0 && height !== 0) {
             this.camera.resize(width, height);
-            this.notifyChange(this.camera.camera3D);
+            this.notifyChange(this.camera3D);
         }
     }
 }

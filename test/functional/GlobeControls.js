@@ -1,4 +1,4 @@
-const assert = require('assert');
+import assert from 'assert';
 
 // global variables
 let middleWidth;
@@ -21,7 +21,7 @@ describe('GlobeControls with globe example', function _() {
                     screen.y = Math.floor(screen.y);
                     screen.x = ((screen.x / dim.x) * 2) - 1;
                     screen.y = (-(screen.y / dim.y) * 2) + 1;
-                    raycaster.setFromCamera(screen, view.camera.camera3D);
+                    raycaster.setFromCamera(screen, view.camera3D);
                     target.copy(ellipsoid.intersection(raycaster.ray));
 
                     return target;
@@ -130,7 +130,7 @@ describe('GlobeControls with globe example', function _() {
         await mouse.move(middleWidth, middleHeight, { steps: 20 });
         await mouse.down({ button: 'middle' });
         await mouse.move(middleWidth, (middleHeight) - 200, { steps: 50 });
-        await mouse.up();
+        await mouse.up({ button: 'middle' });
         const endRange = await page.evaluate(() => Promise.resolve(view.controls.getRange()));
         assert.ok((initialPosition.range - endRange) > 20000000);
     });

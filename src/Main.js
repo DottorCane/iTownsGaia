@@ -1,5 +1,5 @@
 const conf = {
-    version: '2.41.0',
+    version: '2.44.2',
 };
 export const REVISION = conf.version;
 
@@ -7,7 +7,7 @@ export const REVISION = conf.version;
 export { default as Extent } from 'Core/Geographic/Extent';
 export { default as Coordinates } from 'Core/Geographic/Coordinates';
 export { default as GeoidGrid } from 'Core/Geographic/GeoidGrid';
-export { default as CRS } from 'Core/Geographic/Crs';
+export * as CRS from 'Core/Geographic/Crs';
 
 export { default as Ellipsoid, ellipsoidSizes } from 'Core/Math/Ellipsoid';
 export { default as GlobeView, GLOBE_VIEW_EVENTS } from 'Core/Prefab/GlobeView';
@@ -52,7 +52,15 @@ export { default as GeometryLayer } from 'Layer/GeometryLayer';
 export { default as FeatureGeometryLayer } from 'Layer/FeatureGeometryLayer';
 export { default as PointCloudLayer } from 'Layer/PointCloudLayer';
 export { default as PotreeLayer } from 'Layer/PotreeLayer';
+export { default as Potree2Layer } from 'Layer/Potree2Layer';
 export { default as C3DTilesLayer, C3DTILES_LAYER_EVENTS } from 'Layer/C3DTilesLayer';
+export {
+    default as OGC3DTilesLayer,
+    OGC3DTILES_LAYER_EVENTS,
+    enableDracoLoader,
+    enableKtx2Loader,
+    enableMeshoptDecoder,
+} from 'Layer/OGC3DTilesLayer';
 export { default as TiledGeometryLayer } from 'Layer/TiledGeometryLayer';
 export { default as OrientedImageLayer } from 'Layer/OrientedImageLayer';
 export { STRATEGY_MIN_NETWORK_TRAFFIC, STRATEGY_GROUP, STRATEGY_PROGRESSIVE, STRATEGY_DICHOTOMY } from 'Layer/LayerUpdateStrategy';
@@ -61,6 +69,7 @@ export { default as GlobeLayer } from 'Core/Prefab/Globe/GlobeLayer';
 export { default as PlanarLayer } from 'Core/Prefab/Planar/PlanarLayer';
 export { default as LabelLayer } from 'Layer/LabelLayer';
 export { default as EntwinePointTileLayer } from 'Layer/EntwinePointTileLayer';
+export { default as CopcLayer } from 'Layer/CopcLayer';
 export { default as GeoidLayer } from 'Layer/GeoidLayer';
 
 // Sources provided by default in iTowns
@@ -75,13 +84,20 @@ export { default as WMTSSource } from 'Source/WMTSSource';
 export { default as VectorTilesSource } from 'Source/VectorTilesSource';
 export { default as OrientedImageSource } from 'Source/OrientedImageSource';
 export { default as PotreeSource } from 'Source/PotreeSource';
+export { default as Potree2Source } from 'Source/Potree2Source';
 export { default as C3DTilesSource } from 'Source/C3DTilesSource';
 export { default as C3DTilesIonSource } from 'Source/C3DTilesIonSource';
+export { default as C3DTilesGoogleSource } from 'Source/C3DTilesGoogleSource';
+export { default as OGC3DTilesSource } from 'Source/OGC3DTilesSource';
+export { default as OGC3DTilesIonSource } from 'Source/OGC3DTilesIonSource';
+export { default as OGC3DTilesGoogleSource } from 'Source/OGC3DTilesGoogleSource';
 export { default as EntwinePointTileSource } from 'Source/EntwinePointTileSource';
+export { default as CopcSource } from 'Source/CopcSource';
 
 //TODO:FIX componenti custom di Gaia
 export { default as GaiaGeometryLayer } from 'Layer/GaiaGeometryLayer';
 export { default as Gaia3DPointSource } from 'Source/Gaia3DPointSource';
+export { default as Gaia3DPointSource2 } from 'Source/Gaia3DPointSource2';
 
 // Parsers provided by default in iTowns
 // Custom parser can be implemented as wanted, as long as the main function
@@ -95,7 +111,8 @@ export { default as LASParser } from 'Parser/LASParser';
 export { default as ISGParser } from 'Parser/ISGParser';
 export { default as GDFParser } from 'Parser/GDFParser';
 export { default as GTXParser } from 'Parser/GTXParser';
-export { enableDracoLoader, enableKtx2Loader, glTFLoader, legacyGLTFLoader } from 'Parser/B3dmParser';
+export { default as B3dmParser } from 'Parser/B3dmParser';
+export { default as iGLTFLoader } from 'Parser/iGLTFLoader';
 
 // 3D Tiles classes and extensions
 // Exported to allow one to implement its own 3D Tiles extension which needs to
@@ -105,6 +122,6 @@ export { default as C3DTileset } from './Core/3DTiles/C3DTileset';
 export { default as C3DTBoundingVolume } from './Core/3DTiles/C3DTBoundingVolume';
 export { default as C3DTBatchTable } from './Core/3DTiles/C3DTBatchTable';
 export { default as C3DTExtensions } from './Core/3DTiles/C3DTExtensions';
-export { default as C3DTilesTypes } from './Core/3DTiles/C3DTilesTypes';
+export { C3DTilesTypes, C3DTilesBoundingVolumeTypes } from './Core/3DTiles/C3DTilesEnums';
 export { default as C3DTBatchTableHierarchyExtension } from './Core/3DTiles/C3DTBatchTableHierarchyExtension';
 export { process3dTilesNode, $3dTilesCulling, $3dTilesSubdivisionControl } from 'Process/3dTilesProcessing';

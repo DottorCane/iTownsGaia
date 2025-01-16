@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { ELEVATION_MODES } from 'Renderer/LayeredMaterial';
 import { checkNodeElevationTextureValidity, insertSignificantValuesFromParent, computeMinMaxElevation } from 'Parser/XbilParser';
-import CRS from 'Core/Geographic/Crs';
 
 export const EMPTY_TEXTURE_ZOOM = -1;
 
@@ -18,7 +17,7 @@ function getIndiceWithPitch(i, pitch, w) {
 }
 
 /**
- * A `RasterTile` is part of raster [`Layer`]{@link Layer} data.
+ * A `RasterTile` is part of raster {@link Layer} data.
  * This part is a spatial subdivision of the extent of a layer.
  * In the `RasterTile`, The data are converted on three.js textures.
  * This `RasterTile` textures are assigned to a `LayeredMaterial`.
@@ -32,7 +31,7 @@ class RasterTile extends THREE.EventDispatcher {
     constructor(material, layer) {
         super();
         this.layer = layer;
-        this.crs = layer.parent.tileMatrixSets.indexOf(CRS.formatToTms(layer.crs));
+        this.crs = layer.parent.tileMatrixSets.indexOf(layer.crs);
         if (this.crs == -1) {
             console.error('Unknown crs:', layer.crs);
         }
@@ -79,7 +78,7 @@ class RasterTile extends THREE.EventDispatcher {
         }
     }
 
-    dispose(removeEvent) {
+    dispose(removeEvent = true) {
         if (removeEvent) {
             this.layer.removeEventListener('visible-property-changed', this._handlerCBEvent);
             this.layer.removeEventListener('opacity-property-changed', this._handlerCBEvent);
@@ -99,7 +98,7 @@ class RasterTile extends THREE.EventDispatcher {
     }
 
     setTexture(index, texture, offsetScale) {
-        this.level = (texture && (index == 0)) ? texture.extent.zoom : this.level;
+        this.level = (texture && texture.extent && (index == 0)) ? texture.extent.zoom : this.level;
         this.textures[index] = texture || null;
         this.offsetScales[index] = offsetScale;
         this.material.layersNeedUpdate = true;

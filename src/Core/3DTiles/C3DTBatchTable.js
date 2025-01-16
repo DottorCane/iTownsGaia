@@ -1,8 +1,9 @@
-import utf8Decoder from 'Utils/Utf8Decoder';
 import binaryPropertyAccessor from './utils/BinaryPropertyAccessor';
-import C3DTilesTypes from './C3DTilesTypes';
+import { C3DTilesTypes } from './C3DTilesEnums';
 
-/** @classdesc
+const utf8Decoder = new TextDecoder();
+
+/**
  * A 3D Tiles
  * [batch
  * table](https://github.com/AnalyticalGraphicsInc/3d-tiles/tree/master/specification/TileFormats/BatchTable).

@@ -5,9 +5,10 @@ import GeometryLayer from 'Layer/GeometryLayer';
 import Coordinates from 'Core/Geographic/Coordinates';
 import Extent from 'Core/Geographic/Extent';
 import Label from 'Core/Label';
-import { FEATURE_TYPES } from 'Core/Feature';
-import { readExpression } from 'Core/Style';
+import { readExpression, StyleContext } from 'Core/Style';
 import { ScreenGrid } from 'Renderer/Label2DRenderer';
+
+const context = new StyleContext();
 
 const coord = new Coordinates('EPSG:4326', 0, 0, 0);
 
@@ -138,7 +139,8 @@ class LabelsNode extends THREE.Group {
 /**
  * A layer to handle a bunch of `Label`. This layer can be created on its own,
  * but it is better to use the option `addLabelLayer` on another `Layer` to let
- * it work with it (see the `vector_tile_raster_2d` example).
+ * it work with it (see the `vector_tile_raster_2d` example). Supported for Points features, not yet
+ * for Lines and Polygons features.
  *
  * @property {boolean} isLabelLayer - Used to checkout whether this layer is a
  * LabelLayer.  Default is true. You should not change this, as it is used
@@ -147,7 +149,6 @@ class LabelsNode extends THREE.Group {
 class LabelLayer extends GeometryLayer {
     #filterGrid = new ScreenGrid();
     /**
-     * @constructor
      * @extends Layer
      *
      * @param {string} id - The id of the layer, that should be unique. It is
@@ -174,9 +175,14 @@ class LabelLayer extends GeometryLayer {
      * except for the `Style.text.anchor` parameter which can help place the label.
      */
     constructor(id, config = {}) {
-        const domElement = config.domElement;
-        delete config.domElement;
-        super(id, config.object3d || new THREE.Group(), config);
+        const {
+            domElement,
+            performance = true,
+            forceClampToTerrain = false,
+            margin,
+            ...geometryConfig
+        } = config;
+        super(id, config.object3d || new THREE.Group(), geometryConfig);
 
         this.isLabelLayer = true;
         this.domElement = new DomNode();
@@ -184,8 +190,9 @@ class LabelLayer extends GeometryLayer {
         this.domElement.dom.id = `itowns-label-${this.id}`;
         this.buildExtent = true;
         this.crs = config.source.crs;
-        this.performance = config.performance || true;
-        this.forceClampToTerrain = config.forceClampToTerrain || false;
+        this.performance = performance;
+        this.forceClampToTerrain = forceClampToTerrain;
+        this.margin = margin;
 
         this.toHide = new THREE.Group();
 
@@ -228,71 +235,80 @@ class LabelLayer extends GeometryLayer {
      *
      * @param {FeatureCollection} data - The FeatureCollection to read the
      * labels from.
-     * @param {Extent} extent
+     * @param {Extent|Tile} extentOrTile
      *
      * @return {Label[]} An array containing all the created labels.
      */
-    convert(data, extent) {
+    convert(data, extentOrTile) {
         const labels = [];
 
-        const layerField = this.style && this.style.text && this.style.text.field;
-
         // Converting the extent now is faster for further operation
-        extent.as(data.crs, _extent);
+        if (extentOrTile.isExtent) {
+            extentOrTile.as(data.crs, _extent);
+        } else {
+            extentOrTile.toExtent(data.crs, _extent);
+        }
         coord.crs = data.crs;
-        const globals = { zoom: extent.zoom };
+
+        context.setZoom(extentOrTile.zoom);
 
         data.features.forEach((f) => {
-            // TODO: add support for LINE and POLYGON
-            if (f.type !== FEATURE_TYPES.POINT) {
-                return;
+            if (f.style.text) {
+                if (Object.keys(f.style.text).length === 0) {
+                    return;
+                }
             }
 
-            const featureField = f.style.text.field;
+            context.setFeature(f);
+
+            const featureField = f.style?.text?.field;
 
             // determine if altitude style is specified by the user
-            const altitudeStyle = f.style.point.base_altitude;
-            const isDefaultElevationStyle = altitudeStyle instanceof Function && altitudeStyle.name == 'base_altitudeDefault';
+            const altitudeStyle = f.style?.point?.base_altitude;
+            const isDefaultElevationStyle = altitudeStyle instanceof Function && altitudeStyle.name == 'baseAltitudeDefault';
 
             // determine if the altitude needs update with ElevationLayer
             labels.needsAltitude = labels.needsAltitude || this.forceClampToTerrain === true || (isDefaultElevationStyle && !f.hasRawElevationData);
 
             f.geometries.forEach((g) => {
-                // NOTE: this only works because only POINT is supported, it
-                // needs more work for LINE and POLYGON
-                coord.setFromArray(f.vertices, g.size * g.indices[0].offset);
-                // Transform coordinate to data.crs projection
-                coord.applyMatrix4(data.matrixWorld);
-
-                if (!_extent.isPointInside(coord)) { return; }
-
-                const geometryField = g.properties.style && g.properties.style.text.field;
+                context.setGeometry(g);
+                this.style.setContext(context);
+                const layerField = this.style.text && this.style.text.field;
+                const geometryField = g.properties.style && g.properties.style.text && g.properties.style.text.field;
                 let content;
-                const context = { globals, properties: () => g.properties };
                 if (this.labelDomelement) {
                     content = readExpression(this.labelDomelement, context);
                 } else if (!geometryField && !featureField && !layerField) {
                     // Check if there is an icon, with no text
                     if (!(g.properties.style && (g.properties.style.icon.source || g.properties.style.icon.key))
-                        && !(f.style && (f.style.icon.source || f.style.icon.key))
-                        && !(this.style && (this.style.icon.source || this.style.icon.key))) {
+                        && !(f.style && f.style.icon && (f.style.icon.source || f.style.icon.key))
+                        && !(this.style.icon && (this.style.icon.source || this.style.icon.key))) {
                         return;
                     }
-                } else if (geometryField) {
-                    content = g.properties.style.getTextFromProperties(context);
-                } else if (featureField) {
-                    content = f.style.getTextFromProperties(context);
-                } else if (layerField) {
-                    content = this.style.getTextFromProperties(context);
                 }
 
-                const style = (g.properties.style || f.style || this.style).symbolStylefromContext(context);
+                if (this.style.zoom.min > this.style.context.zoom || this.style.zoom.max <= this.style.context.zoom) {
+                    return;
+                }
 
-                const label = new Label(content, coord.clone(), style, this.source.sprites);
-                label.layerId = this.id;
-                label.padding = this.margin || label.padding;
+                // NOTE: this only works fine for POINT.
+                // It needs more work for LINE and POLYGON as we currently only use the first point of the entity
 
-                labels.push(label);
+                g.indices.forEach((i) => {
+                    coord.setFromArray(f.vertices, g.size * i.offset);
+                    // Transform coordinate to data.crs projection
+                    coord.applyMatrix4(data.matrixWorld);
+
+                    if (!_extent.isPointInside(coord)) { return; }
+
+                    const label = new Label(content, coord.clone(), this.style);
+
+                    label.layerId = this.id;
+                    label.order = f.order;
+                    label.padding = this.margin || label.padding;
+
+                    labels.push(label);
+                });
             });
         });
 

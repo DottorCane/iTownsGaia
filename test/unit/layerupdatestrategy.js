@@ -43,16 +43,17 @@ describe('Handling no data source error', function () {
         source,
         crs: 'EPSG:4326',
         info: { update: () => {} },
-        tileMatrixSets: [
-            'TMS:4326',
-            'TMS:3857',
-        ],
-        parent: { tileMatrixSets: [
-            'TMS:4326',
-            'TMS:3857',
-        ],
-        },
     });
+    layer.tileMatrixSets = [
+        'EPSG:4326',
+        'EPSG:3857',
+    ];
+    layer.parent = {
+        tileMatrixSets: [
+            'EPSG:4326',
+            'EPSG:3857',
+        ],
+    };
 
     const nodeLayer = new RasterColorTile(material, layer);
     nodeLayer.level = 10;

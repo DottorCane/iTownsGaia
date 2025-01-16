@@ -20,7 +20,7 @@ describe('GlobeView', function () {
     pickedPosition.copy(viewer.camera.position());
 
     const cameraDirection = new THREE.Vector3();
-    viewer.camera.camera3D.getWorldDirection(cameraDirection);
+    viewer.camera3D.getWorldDirection(cameraDirection);
     cameraDirection.multiplyScalar(placement.range);
     pickedPosition.add(cameraDirection);
 
@@ -43,20 +43,22 @@ describe('GlobeView', function () {
     });
 
     it('update', function (done) {
-        viewer.tileLayer.whenReady.then(() => {
-            const node = viewer.tileLayer.level0Nodes[0];
-            viewer.tileLayer.update(context, viewer.tileLayer, node);
-            done();
-        });
+        viewer.tileLayer.whenReady
+            .then(() => {
+                const node = viewer.tileLayer.level0Nodes[0];
+                viewer.tileLayer.update(context, viewer.tileLayer, node);
+                done();
+            }).catch(done);
     });
 
     it('ObjectRemovalHelper', function (done) {
-        viewer.tileLayer.whenReady.then(() => {
-            const node = viewer.tileLayer.level0Nodes[0];
-            ObjectRemovalHelper.removeChildrenAndCleanup(viewer.tileLayer, node);
-            ObjectRemovalHelper.removeChildren(viewer.tileLayer, node);
-            done();
-        });
+        viewer.tileLayer.whenReady
+            .then(() => {
+                const node = viewer.tileLayer.level0Nodes[0];
+                ObjectRemovalHelper.removeChildrenAndCleanup(viewer.tileLayer, node);
+                ObjectRemovalHelper.removeChildren(viewer.tileLayer, node);
+                done();
+            }).catch(done);
     });
 
     it('should get the zoom scale', () => {
@@ -95,12 +97,11 @@ describe('GlobeView', function () {
             extent,
             { renderer },
         );
-        const camera3D = extentViewer.camera.camera3D;
         const size = new THREE.Vector3();
         new OBB().setFromExtent(extent).box3D.getSize(size);
         assert.ok(
-            CameraUtils.getTransformCameraLookingAtTarget(extentViewer, camera3D).range -
-            size.x / (2 * Math.tan(THREE.MathUtils.degToRad(camera3D.fov) / 2))
+            CameraUtils.getTransformCameraLookingAtTarget(extentViewer, extentViewer.camera3D).range -
+            size.x / (2 * Math.tan(THREE.MathUtils.degToRad(extentViewer.camera3D.fov) / 2))
             < 10 ** -6,
         );
     });

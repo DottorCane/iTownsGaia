@@ -159,7 +159,7 @@ let previous;
  * @param      {object}  [options] An object with one or more configuration properties. Any property of GlobeControls
  * can be passed in this object.
  * @property      {number}  zoomFactor The factor the scale is multiplied by when dollying (zooming) in or
- * divided by when dollying out. Default is 2.
+ * divided by when dollying out. Default is 1.1.
  * @property      {number}  rotateSpeed Speed camera rotation in orbit and panoramic mode. Default is 0.25.
  * @property      {number}  minDistance Minimum distance between ground and camera in meters (Perspective Camera only).
  * Default is 250.
@@ -180,16 +180,18 @@ let previous;
  * @property      {boolean} enableDamping Enable damping or not (simulates the lag that a real camera
  * operator introduces while operating a heavy physical camera). Default is true.
  * @property      {boolean} dampingMoveFactor the damping move factor. Default is 0.25.
+ * @property      {StateControl~State} stateControl redefining which controls state is triggered by the keyboard/mouse
+ * event (For example, rewrite the PAN movement to be triggered with the 'left' mouseButton instead of 'right').
  */
 class GlobeControls extends THREE.EventDispatcher {
     constructor(view, placement, options = {}) {
         super();
         this.player = new AnimationPlayer();
         this.view = view;
-        this.camera = view.camera.camera3D;
+        this.camera = view.camera3D;
 
         // State control
-        this.states = new StateControl(this.view);
+        this.states = new StateControl(this.view, options.stateControl);
 
         // this.enabled property has moved to StateControl
         Object.defineProperty(this, 'enabled', {
@@ -209,7 +211,7 @@ class GlobeControls extends THREE.EventDispatcher {
             console.warn('Controls zoomSpeed parameter is deprecated. Use zoomFactor instead.');
             options.zoomFactor = options.zoomFactor || options.zoomSpeed;
         }
-        this.zoomFactor = options.zoomFactor || 1.25;
+        this.zoomFactor = options.zoomFactor || 1.1;
 
         // Limits to how far you can dolly in and out ( PerspectiveCamera only )
         this.minDistance = options.minDistance || 250;
@@ -266,7 +268,7 @@ class GlobeControls extends THREE.EventDispatcher {
         this.updateHelper = enableTargetHelper ? (position, helper) => {
             positionObject(position, helper);
             view.notifyChange(this.camera);
-        } : function empty() {};
+        } : function empty() { };
 
         this._onEndingMove = null;
         this._onTravel = this.travel.bind(this);
@@ -321,10 +323,10 @@ class GlobeControls extends THREE.EventDispatcher {
         coordCameraTarget.crs = this.view.referenceCrs;
     }
 
-    get dollyInScale() {
+    get zoomInScale() {
         return this.zoomFactor;
     }
-    get dollyOutScale() {
+    get zoomOutScale() {
         return 1 / this.zoomFactor;
     }
 
@@ -387,9 +389,10 @@ class GlobeControls extends THREE.EventDispatcher {
         }
     }
 
+    // For Mobile
     dolly(delta) {
         if (delta === 0) { return; }
-        dollyScale = delta > 0 ? this.dollyInScale : this.dollyOutScale;
+        dollyScale = delta > 0 ? this.zoomInScale : this.zoomOutScale;
 
         if (this.camera.isPerspectiveCamera) {
             orbitScale /= dollyScale;
@@ -452,7 +455,8 @@ class GlobeControls extends THREE.EventDispatcher {
                 quaterPano.setFromAxisAngle(normal, sphericalDelta.theta).multiply(quaterAxis.setFromAxisAngle(axisX, sphericalDelta.phi));
                 cameraTarget.position.applyQuaternion(quaterPano);
                 this.camera.localToWorld(cameraTarget.position);
-                break; }
+                break;
+            }
             // ZOOM/ORBIT Move Camera around the target camera
             default: {
                 // get camera position in local space of target
@@ -592,6 +596,7 @@ class GlobeControls extends THREE.EventDispatcher {
 
         // Initialize dolly movement.
         dollyStart.copy(event.viewCoords);
+        this.view.getPickingPositionFromDepth(event.viewCoords, pickedPosition);        // mouse position
 
         // Initialize pan movement.
         panStart.copy(event.viewCoords);
@@ -627,11 +632,9 @@ class GlobeControls extends THREE.EventDispatcher {
     handleDolly(event) {
         dollyEnd.copy(event.viewCoords);
         dollyDelta.subVectors(dollyEnd, dollyStart);
-
-        this.dolly(-dollyDelta.y);
         dollyStart.copy(dollyEnd);
-
-        this.update();
+        event.delta = dollyDelta.y;
+        if (event.delta != 0) { this.handleZoom(event); }
     }
 
     handlePan(event) {
@@ -752,7 +755,7 @@ class GlobeControls extends THREE.EventDispatcher {
         const range = this.getRange(point);
         if (point && range > this.minDistance) {
             return this.lookAtCoordinate({
-                coord: new Coordinates('EPSG:4978', point),
+                coord: new Coordinates('EPSG:4978').setFromVector3(point),
                 range: range * (event.direction === 'out' ? 1 / 0.6 : 0.6),
                 time: 1500,
             });
@@ -762,23 +765,31 @@ class GlobeControls extends THREE.EventDispatcher {
     handleZoom(event) {
         this.player.stop();
         CameraUtils.stop(this.view, this.camera);
+        const zoomScale = event.delta > 0 ? this.zoomInScale : this.zoomOutScale;
+        let point = event.type === 'dolly' ? pickedPosition : this.view.getPickingPositionFromDepth(event.viewCoords);        // get cursor position
+        let range = this.getRange();
+        range *= zoomScale;
 
-        this.updateTarget();
-        const delta = -event.delta;
-        this.dolly(delta);
+        if (point && (range > this.minDistance && range < this.maxDistance)) {  // check if the zoom is in the allowed interval
+            const camPos = xyz.setFromVector3(cameraTarget.position).as('EPSG:4326', c).toVector3();
+            point = xyz.setFromVector3(point).as('EPSG:4326', c).toVector3();
 
-        const previousRange = this.getRange(pickedPosition);
-        this.update();
-        const newRange = this.getRange(pickedPosition);
-        if (Math.abs(newRange - previousRange) / previousRange > 0.001) {
-            this.dispatchEvent({
-                type: CONTROL_EVENTS.RANGE_CHANGED,
-                previous: previousRange,
-                new: newRange,
-            });
+            if (camPos.x * point.x < 0) {     // Correct rotation at 180th meridian by using 0 <= longitude <=360 for interpolation purpose
+                if (camPos.x - point.x > 180) { point.x += 360; } else if (point.x - camPos.x > 180) { camPos.x += 360; }
+            }
+            point.lerp(  // point interpol between mouse cursor and cam pos
+                camPos,
+                zoomScale, // interpol factor
+            );
+
+            point = c.setFromVector3(point).as('EPSG:4978', xyz);
+
+            return this.lookAtCoordinate({       // update view to the interpolate point
+                coord: point,
+                range,
+            },
+            false);
         }
-        this.dispatchEvent(this.startEvent);
-        this.dispatchEvent(this.endEvent);
     }
 
     onTouchStart(event) {
@@ -802,7 +813,8 @@ class GlobeControls extends THREE.EventDispatcher {
                     } else {
                         this.state = this.states.NONE;
                     }
-                    break; }
+                    break;
+                }
                 case this.states.ORBIT:
                 case this.states.DOLLY: {
                     const x = event.touches[0].pageX;
@@ -812,7 +824,8 @@ class GlobeControls extends THREE.EventDispatcher {
                     const distance = Math.sqrt(dx * dx + dy * dy);
                     dollyStart.set(0, distance);
                     rotateStart.set(x, y);
-                    break; }
+                    break;
+                }
                 case this.states.PAN:
                     panStart.set(event.touches[0].pageX, event.touches[0].pageY);
                     break;
@@ -849,7 +862,8 @@ class GlobeControls extends THREE.EventDispatcher {
                 } else {
                     this.onTouchEnd();
                 }
-                break; }
+                break;
+            }
             case this.states.ORBIT.finger:
             case this.states.DOLLY.finger: {
                 const gfx = this.view.mainLoop.gfxEngine;
@@ -873,7 +887,8 @@ class GlobeControls extends THREE.EventDispatcher {
 
                 dollyStart.copy(dollyEnd);
 
-                break; }
+                break;
+            }
             case this.states.PAN.finger:
                 panEnd.set(event.touches[0].pageX, event.touches[0].pageY);
                 panDelta.subVectors(panEnd, panStart);
@@ -1013,7 +1028,9 @@ class GlobeControls extends THREE.EventDispatcher {
      */
 
     getCameraCoordinate() {
-        return new Coordinates('EPSG:4978', this.camera.position).as('EPSG:4326');
+        return new Coordinates('EPSG:4978')
+            .setFromVector3(this.camera.position)
+            .as('EPSG:4326');
     }
 
     /**
@@ -1068,7 +1085,7 @@ class GlobeControls extends THREE.EventDispatcher {
      *
      * @deprecated Use View#getScale instead.
      */
-    getScale(pitch) /* istanbul ignore next */ {
+    getScale(pitch) {
         console.warn('Deprecated, use View#getScale instead.');
         return this.view.getScale(pitch);
     }
@@ -1081,7 +1098,7 @@ class GlobeControls extends THREE.EventDispatcher {
      *
      * @deprecated Use `View#getPixelsToMeters` instead.
      */
-    pixelsToMeters(pixels, pixelPitch = 0.28) /* istanbul ignore next */ {
+    pixelsToMeters(pixels, pixelPitch = 0.28) {
         console.warn('Deprecated use View#getPixelsToMeters instead.');
         const scaled = this.getScale(pixelPitch);
         const size = pixels * pixelPitch;
@@ -1097,7 +1114,7 @@ class GlobeControls extends THREE.EventDispatcher {
      * @deprecated Use `View#getPixelsToMeters` and `GlobeControls#metersToDegrees`
      * instead.
      */
-    pixelsToDegrees(pixels, pixelPitch = 0.28) /* istanbul ignore next */ {
+    pixelsToDegrees(pixels, pixelPitch = 0.28) {
         console.warn('Deprecated, use View#getPixelsToMeters and GlobeControls#getMetersToDegrees instead.');
         const chord = this.pixelsToMeters(pixels, pixelPitch);
         return THREE.MathUtils.radToDeg(2 * Math.asin(chord / (2 * ellipsoidSizes.x)));
@@ -1111,7 +1128,7 @@ class GlobeControls extends THREE.EventDispatcher {
      *
      * @deprecated Use `View#getMetersToPixels` instead.
      */
-    metersToPixels(value, pixelPitch = 0.28) /* istanbul ignore next */ {
+    metersToPixels(value, pixelPitch = 0.28) {
         console.warn('Deprecated, use View#getMetersToPixels instead.');
         const scaled = this.getScale(pixelPitch);
         pixelPitch /= 1000;
@@ -1137,11 +1154,11 @@ class GlobeControls extends THREE.EventDispatcher {
      * Zoom parameter is ignored if range is set
      * The tilt's interval is between 4 and 89.5 degree
      *
-     * @param      {CameraUtils~CameraTransformOptions|Extent}   params camera transformation to apply
-     * @param      {number}   [params.zoom]   zoom
-     * @param      {number}   [params.scale]   scale
-     * @param      {boolean}  isAnimated  Indicates if animated
-     * @return     {Promise}  A promise that resolves when transformation is complete
+     * @param {CameraUtils~CameraTransformOptions|Extent} [params] - camera transformation to apply
+     * @param {number} [params.zoom] - zoom
+     * @param {number} [params.scale] - scale
+     * @param {boolean} [isAnimated] - Indicates if animated
+     * @return {Promise} A promise that resolves when transformation is complete
      */
     lookAtCoordinate(params = {}, isAnimated = this.isAnimationEnabled()) {
         this.player.stop();
@@ -1201,7 +1218,9 @@ class GlobeControls extends THREE.EventDispatcher {
             return;
         }
 
-        return new Coordinates('EPSG:4978', pickedPosition).as('EPSG:4326');
+        return new Coordinates('EPSG:4978')
+            .setFromVector3(pickedPosition)
+            .as('EPSG:4326');
     }
 }
 

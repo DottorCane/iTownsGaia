@@ -3,8 +3,12 @@ import B3dmParser from 'Parser/B3dmParser';
 import PntsParser from 'Parser/PntsParser';
 import Fetcher from 'Provider/Fetcher';
 import ReferLayerProperties from 'Layer/ReferencingLayerProperties';
-import utf8Decoder from 'Utils/Utf8Decoder';
 import PointsMaterial from 'Renderer/PointsMaterial';
+// A bit weird but temporary until we remove this deprecated provider. Mainly to benefit from the enableDracoLoader and enableKtx2Loader
+// methods.
+import { itownsGLTFLoader } from 'Layer/OGC3DTilesLayer';
+
+const utf8Decoder = new TextDecoder();
 
 function b3dmToMesh(data, layer, url) {
     const urlBase = THREE.LoaderUtils.extractUrlBase(url);
@@ -13,7 +17,6 @@ function b3dmToMesh(data, layer, url) {
         urlBase,
         overrideMaterials: layer.overrideMaterials,
         doNotPatchMaterial: layer.doNotPatchMaterial,
-        opacity: layer.opacity,
         registeredExtensions: layer.registeredExtensions,
         layer,
     };
@@ -25,15 +28,20 @@ function b3dmToMesh(data, layer, url) {
     });
 }
 
+function gltfToMesh(data, layer, url) {
+    const urlBase = THREE.LoaderUtils.extractUrlBase(url);
+    return itownsGLTFLoader.parseAsync(data, urlBase).then(result => ({ object3d: result.scene }));
+}
+
 function pntsParse(data, layer) {
     return PntsParser.parse(data, layer.registeredExtensions).then((result) => {
         const material = layer.material ?
             layer.material.clone() :
             new PointsMaterial({
-                size: 0.05,
+                size: 1,
                 mode: layer.pntsMode,
                 shape: layer.pntsShape,
-                classification: layer.classification,
+                classificationScheme: layer.classification,
                 sizeMode: layer.pntsSizeMode,
                 minAttenuatedSize: layer.pntsMinAttenuatedSize,
                 maxAttenuatedSize: layer.pntsMaxAttenuatedSize,
@@ -73,9 +81,6 @@ export function configureTile(tile, layer, metadata, parent) {
     }
     tile.viewerRequestVolume = metadata.viewerRequestVolume;
     tile.boundingVolume = metadata.boundingVolume;
-    if (tile.boundingVolume.region) {
-        tile.add(tile.boundingVolume.region);
-    }
     tile.updateMatrixWorld();
 }
 
@@ -94,10 +99,14 @@ function executeCommand(command) {
     };
     if (path) {
         // Check if we have relative or absolute url (with tileset's lopocs for example)
-        const url = path.startsWith('http') ? path : metadata.baseURL + path;
+        let url = path.startsWith('http') ? path : metadata.baseURL + path;
+        if (layer.source.isC3DTilesGoogleSource) {
+            url = layer.source.getTileUrl(url);
+        }
         const supportedFormats = {
             b3dm: b3dmToMesh,
             pnts: pntsParse,
+            gltf: gltfToMesh,
         };
         return Fetcher.arrayBuffer(url, layer.source.networkOptions).then((result) => {
             if (result !== undefined) {
@@ -105,12 +114,17 @@ function executeCommand(command) {
                 const magic = utf8Decoder.decode(new Uint8Array(result, 0, 4));
                 if (magic[0] === '{') {
                     result = JSON.parse(utf8Decoder.decode(new Uint8Array(result)));
-                    const newPrefix = url.slice(0, url.lastIndexOf('/') + 1);
+                    // Another specifics of 3D tiles from Google: tilesets in tilesets are required from the root base
+                    // url and not from their parent base url
+                    const newPrefix = layer.source.isC3DTilesGoogleSource ? layer.source.baseUrl : url.slice(0, url.lastIndexOf('/') + 1);
                     layer.tileset.extendTileset(result, metadata.tileId, newPrefix, layer.registeredExtensions);
                 } else if (magic == 'b3dm') {
                     func = supportedFormats.b3dm;
                 } else if (magic == 'pnts') {
+                    layer.hasPnts = true;
                     func = supportedFormats.pnts;
+                } else if (magic == 'glTF') {
+                    func = supportedFormats.gltf;
                 } else {
                     return Promise.reject(`Unsupported magic code ${magic}`);
                 }

@@ -1,12 +1,7 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 import * as THREE from 'three';
 import TileMesh from 'Core/TileMesh';
 import LayeredMaterial from 'Renderer/LayeredMaterial';
-import newTileGeometry from 'Core/Prefab/TileBuilder';
+import { newTileGeometry } from 'Core/Prefab/TileBuilder';
 import ReferLayerProperties from 'Layer/ReferencingLayerProperties';
 import { geoidLayerIsVisible } from 'Layer/GeoidLayer';
 
@@ -45,13 +40,14 @@ export default {
         const paramsGeometry = {
             extent,
             level,
-            segment: layer.segments || 16,
+            segments: layer.segments || 16,
             disableSkirt: layer.disableSkirt,
+            hideSkirt: layer.hideSkirt,
         };
 
         return newTileGeometry(builder, paramsGeometry).then((result) => {
             // build tile mesh
-            result.geometry._count++;
+            result.geometry.increaseRefCount();
             const crsCount = layer.tileMatrixSets.length;
             const material = new LayeredMaterial(layer.materialOptions, crsCount);
             ReferLayerProperties(material, layer);
@@ -60,7 +56,7 @@ export default {
 
             if (parent && parent.isTileMesh) {
                 // get parent extent transformation
-                const pTrans = builder.computeSharableExtent(parent.extent);
+                const pTrans = builder.computeShareableExtent(parent.extent);
                 // place relative to his parent
                 result.position.sub(pTrans.position).applyQuaternion(pTrans.quaternion.invert());
                 result.quaternion.premultiply(pTrans.quaternion);

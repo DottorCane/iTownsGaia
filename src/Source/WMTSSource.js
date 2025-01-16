@@ -1,9 +1,8 @@
 import TMSSource from 'Source/TMSSource';
 
 /**
- * @classdesc
  * An object defining the source of resources to get from a
- * [WMTS]{@link http://www.opengeospatial.org/standards/wmts} server. It inherits
+ * [WMTS](http://www.opengeospatial.org/standards/wmts) server. It inherits
  * from {@link TMSSource}.
  *
  * @extends TMSSource
@@ -63,8 +62,6 @@ class WMTSSource extends TMSSource {
     /**
      * @param {Object} source - An object that can contain all properties of a
      * WMTSSource and {@link Source}. Only `url`, `name` and `crs` are mandatory.
-     *
-     * @constructor
      */
     constructor(source) {
         if (!source.name) {
@@ -75,26 +72,26 @@ class WMTSSource extends TMSSource {
 
         this.isWMTSSource = true;
 
-        // Add ? at the end of the url if it is not already in the given URL
-        if (!this.url.endsWith('?')) {
-            this.url = `${this.url}?`;
-        }
-        this.url = `${this.url}` +
-            `LAYER=${source.name}` +
-            `&FORMAT=${this.format}` +
-            '&SERVICE=WMTS' +
-            `&VERSION=${source.version || '1.0.0'}` +
-            '&REQUEST=GetTile' +
-            `&STYLE=${source.style || 'normal'}` +
-            `&TILEMATRIXSET=${source.tileMatrixSet}` +
-            '&TILEMATRIX=%TILEMATRIX&TILEROW=%ROW&TILECOL=%COL';
+        const urlObj = new URL(this.url);
+        urlObj.searchParams.set('LAYER', source.name);
+        urlObj.searchParams.set('FORMAT', this.format);
+        urlObj.searchParams.set('SERVICE', 'WMTS');
+        urlObj.searchParams.set('VERSION', source.version || '1.0.0');
+        urlObj.searchParams.set('REQUEST', 'GetTile');
+        urlObj.searchParams.set('STYLE', source.style || 'normal');
+        urlObj.searchParams.set('TILEMATRIXSET', source.tileMatrixSet);
+        urlObj.searchParams.set('TILEMATRIX', '%TILEMATRIX');
+        urlObj.searchParams.set('TILEROW', '%ROW');
+        urlObj.searchParams.set('TILECOL', '%COL');
 
         this.vendorSpecific = source.vendorSpecific;
         for (const name in this.vendorSpecific) {
             if (Object.prototype.hasOwnProperty.call(this.vendorSpecific, name)) {
-                this.url = `${this.url}&${name}=${this.vendorSpecific[name]}`;
+                urlObj.searchParams.set(name, this.vendorSpecific[name]);
             }
         }
+
+        this.url = decodeURIComponent(urlObj.toString());
     }
 }
 

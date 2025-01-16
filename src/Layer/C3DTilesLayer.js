@@ -28,12 +28,39 @@ export const C3DTILES_LAYER_EVENTS = {
 
 const update = process3dTilesNode();
 
+/**
+ * Find tileId of object
+ * @param {THREE.Object3D} object - object
+ *
+ * @returns {number} tileId
+ */
+function findTileID(object) {
+    let currentObject = object;
+    let result = currentObject.tileId;
+    while (isNaN(result) && currentObject.parent) {
+        currentObject = currentObject.parent;
+        result = currentObject.tileId;
+    }
+    return result;
+}
+
+/**
+ * Check if object3d has feature
+ * @param {THREE.Object3D} object3d - object3d to check
+ *
+ * @returns {boolean} - true if object3d has feature
+ */
+function object3DHasFeature(object3d) {
+    return object3d.geometry && object3d.geometry.attributes._BATCHID;
+}
+
+/**
+ * @extends GeometryLayer
+ */
 class C3DTilesLayer extends GeometryLayer {
     #fillColorMaterialsBuffer;
     /**
-     * Constructs a new instance of 3d tiles layer.
-     * @constructor
-     * @extends GeometryLayer
+     * @deprecated Deprecated 3D Tiles layer. Use {@link OGC3DTilesLayer} instead.
      *
      * @example
      * // Create a new 3d-tiles layer from a web server
@@ -61,7 +88,7 @@ class C3DTilesLayer extends GeometryLayer {
      * {@link View} that already has a layer going by that id.
      * @param      {object}  config   configuration, all elements in it
      * will be merged as is in the layer.
-     * @param {C3TilesSource} config.source The source of 3d Tiles.
+     * @param {C3DTilesSource} config.source The source of 3d Tiles.
      *
      * name.
      * @param {Number} [config.sseThreshold=16] The [Screen Space Error](https://github.com/CesiumGS/3d-tiles/blob/main/specification/README.md#geometric-error)
@@ -69,15 +96,18 @@ class C3DTilesLayer extends GeometryLayer {
      * @param {Number} [config.cleanupDelay=1000] The time (in ms) after which a tile content (and its children) are
      * removed from the scene.
      * @param {C3DTExtensions} [config.registeredExtensions] 3D Tiles extensions managers registered for this tileset.
-     * @param {String} [config.pntsMode= PNTS_MODE.COLOR] {@link PointsMaterials} Point cloud coloring mode. Only 'COLOR' or 'CLASSIFICATION' are possible. COLOR uses RGB colors of the points, CLASSIFICATION uses a classification property of the batch table to color points.
+     * @param {String} [config.pntsMode= PNTS_MODE.COLOR] {@link PointsMaterial} Point cloud coloring mode.
+     *      Only 'COLOR' or 'CLASSIFICATION' are possible. COLOR uses RGB colors of the points,
+     *      CLASSIFICATION uses a classification property of the batch table to color points.
      * @param {String} [config.pntsShape= PNTS_SHAPE.CIRCLE] Point cloud point shape. Only 'CIRCLE' or 'SQUARE' are possible.
-     * @param {String} [config.pntsSizeMode= PNTS_SIZE_MODE.VALUE] {@link PointsMaterials} Point cloud size mode. Only 'VALUE' or 'ATTENUATED' are possible. VALUE use constant size, ATTENUATED compute size depending on distance from point to camera.
+     * @param {String} [config.pntsSizeMode= PNTS_SIZE_MODE.VALUE] {@link PointsMaterial} Point cloud size mode. Only 'VALUE' or 'ATTENUATED' are possible. VALUE use constant size, ATTENUATED compute size depending on distance from point to camera.
      * @param {Number} [config.pntsMinAttenuatedSize=3] Minimum scale used by 'ATTENUATED' size mode
      * @param {Number} [config.pntsMaxAttenuatedSize=10] Maximum scale used by 'ATTENUATED' size mode
      * @param {Style} [config.style=null] - style used for this layer
      * @param  {View}  view  The view
      */
     constructor(id, config, view) {
+        console.warn('C3DTilesLayer is deprecated and will be removed in iTowns 3.0 version. Use OGC3DTilesLayer instead.');
         super(id, new THREE.Group(), { source: config.source });
         this.isC3DTilesLayer = true;
         this.sseThreshold = config.sseThreshold || 16;
@@ -90,9 +120,8 @@ class C3DTilesLayer extends GeometryLayer {
         this.pntsShape = PNTS_SHAPE.CIRCLE;
         this.classification = config.classification;
         this.pntsSizeMode = PNTS_SIZE_MODE.VALUE;
-        this.pntsMinAttenuatedSize = config.pntsMinAttenuatedSize || 3;
-        this.pntsMaxAttenuatedSize = config.pntsMaxAttenuatedSize || 10;
-
+        this.pntsMinAttenuatedSize = config.pntsMinAttenuatedSize || 1;
+        this.pntsMaxAttenuatedSize = config.pntsMaxAttenuatedSize || 7;
         if (config.pntsMode) {
             const exists = Object.values(PNTS_MODE).includes(config.pntsMode);
             if (!exists) {
@@ -116,7 +145,7 @@ class C3DTilesLayer extends GeometryLayer {
             if (!exists) { console.warn("The points cloud size mode doesn't exist. Use 'VALUE' or 'ATTENUATED' instead."); } else { this.pntsSizeMode = config.pntsSizeMode; }
         }
 
-        /** @type {Style} */
+        /** @type {Style | null} */
         this._style = config.style || null;
 
         /** @type {Map<string, THREE.MeshStandardMaterial>} */
@@ -168,8 +197,8 @@ class C3DTilesLayer extends GeometryLayer {
         });
     }
 
-    preUpdate() {
-        return pre3dTilesUpdate.bind(this)();
+    preUpdate(context) {
+        return pre3dTilesUpdate.bind(this)(context);
     }
 
     update(context, layer, node) {
@@ -199,35 +228,18 @@ class C3DTilesLayer extends GeometryLayer {
     }
 
     /**
-     * Finds the batch table of an object in a 3D Tiles layer. This is
-     * for instance needed when picking because we pick the geometric
-     * object which is not at the same level in the layer structure as
-     * the batch table. More details here on itowns internal
-     * organization of 3DTiles:
-     *  https://github.com/MEPP-team/RICT/blob/master/Doc/iTowns/Doc.md#itowns-internal-organisation-of-3d-tiles-data
-     * @param {THREE.Object3D} object - a 3D geometric object
-     * @returns {C3DTBatchTable} - the batch table of the object
-     */
-    findBatchTable(object) {
-        if (object.batchTable) {
-            return object.batchTable;
-        }
-        if (object.parent) {
-            return this.findBatchTable(object.parent);
-        }
-    }
-
-    /**
      * Get the closest c3DTileFeature of an intersects array.
      * @param {Array} intersects - @return An array containing all
      * targets picked under specified coordinates. Intersects can be
      * computed with view.pickObjectsAt(..). See fillHTMLWithPickingInfo()
      * in 3dTilesHelper.js for an example.
+     *
      * @returns {C3DTileFeature} - the closest C3DTileFeature of the intersects array
      */
     getC3DTileFeatureFromIntersectsArray(intersects) {
         // find closest intersect with an attributes _BATCHID + face != undefined
         let closestIntersect = null;
+
         for (let index = 0; index < intersects.length; index++) {
             const i = intersects[index];
             if (i.object.geometry &&
@@ -244,29 +256,17 @@ class C3DTilesLayer extends GeometryLayer {
             return null;
         }
 
-        // function find the tile id from an object
-        function findTileID(object) {
-            let currentObject = object;
-            let result = currentObject.tileId;
-            while (isNaN(result) && currentObject.parent) {
-                currentObject = currentObject.parent;
-                result = currentObject.tileId;
-            }
-
-            return result;
-        }
-
         const tileId = findTileID(closestIntersect.object);
         // face is a Face3 object of THREE which is a
         // triangular face. face.a is its first vertex
         const vertex = closestIntersect.face.a;
-        const batchID = closestIntersect.object.geometry.attributes._BATCHID.array[vertex];
+        const batchID = closestIntersect.object.geometry.attributes._BATCHID.getX(vertex);
 
         return this.tilesC3DTileFeatures.get(tileId).get(batchID);
     }
 
     /**
-     * Call by {@link 3dTilesProcessing} which handle load and unload of 3DTiles
+     * Called when a tile content is loaded
      * @param {THREE.Object3D} tileContent - tile as THREE.Object3D
      */
     onTileContentLoaded(tileContent) {
@@ -274,24 +274,21 @@ class C3DTilesLayer extends GeometryLayer {
 
         // notify observer
         this.dispatchEvent({ type: C3DTILES_LAYER_EVENTS.ON_TILE_CONTENT_LOADED, tileContent });
+
+        // only update style of tile features
+        this.updateStyle([tileContent.tileId]);
     }
 
     /**
      * Initialize C3DTileFeatures from tileContent
-     *
      * @param {THREE.Object3D} tileContent - tile as THREE.Object3D
      */
     initC3DTileFeatures(tileContent) {
+        this.tilesC3DTileFeatures.set(tileContent.tileId, new Map()); // initialize
         tileContent.traverse((child) => {
-            if (child.geometry && child.geometry.attributes._BATCHID) {
-                this.tilesC3DTileFeatures.set(tileContent.tileId, new Map());// initialize
-                const batchTable = this.findBatchTable(child);
-                if (!batchTable) {
-                    throw new Error('no batchTable');
-                }
-
-                const geometryAttributes = child.geometry.attributes;
-                let currentBatchId = geometryAttributes._BATCHID.array[0];
+            if (object3DHasFeature(child)) {
+                const batchIdAttribute = child.geometry.getAttribute('_BATCHID');
+                let currentBatchId = batchIdAttribute.getX(0);
                 let start = 0;
                 let count = 0;
 
@@ -310,15 +307,20 @@ class C3DTilesLayer extends GeometryLayer {
                             tileContent.tileId,
                             currentBatchId,
                             [{ start, count }], // initialize with current group
-                            batchTable.getInfoById(currentBatchId),
+                            {},
+                            child,
                         );
                         this.tilesC3DTileFeatures.get(tileContent.tileId).set(currentBatchId, c3DTileFeature);
                     }
                 };
 
-                for (let index = 0; index < geometryAttributes.position.array.length; index += geometryAttributes.position.itemSize) {
-                    const batchIndex = index / geometryAttributes.position.itemSize;
-                    const batchId = geometryAttributes._BATCHID.array[batchIndex];
+                // TODO: Could be simplified by incrementing of 1 and stopping the iteration at positionAttributeSize.count
+                // See https://github.com/iTowns/itowns/pull/2266#discussion_r1483285122
+                const positionAttribute = child.geometry.getAttribute('position');
+                const positionAttributeSize = positionAttribute.count * positionAttribute.itemSize;
+                for (let index = 0; index < positionAttributeSize; index += positionAttribute.itemSize) {
+                    const batchIndex = index / positionAttribute.itemSize;
+                    const batchId = batchIdAttribute.getX(batchIndex);
 
                     // check if batchId is currentBatchId
                     if (currentBatchId !== batchId) {
@@ -334,152 +336,115 @@ class C3DTilesLayer extends GeometryLayer {
                     count++;
 
                     // check if end of the array
-                    if (index + geometryAttributes.position.itemSize >= geometryAttributes.position.array.length) {
+                    if (index + positionAttribute.itemSize >= positionAttributeSize) {
                         registerBatchIdGroup();
                     }
                 }
             }
         });
-
-        this.updateStyle([tileContent.tileId]);// only update tile batchelement
-    }
-
-    /**
-     * Compute world box 3 of a c3DTFeature
-     *
-     * @param {C3DTFeature} c3DTFeature - feature to compute world box3
-     * @param {THREE.Box3} [target] - result instance
-     * @returns {THREE.Box3}
-     */
-    computeWorldBox3(c3DTFeature, target = new THREE.Box3()) {
-        // reset
-        target.max.x = -Infinity;
-        target.max.y = -Infinity;
-        target.max.z = -Infinity;
-        target.min.x = Infinity;
-        target.min.y = Infinity;
-        target.min.z = Infinity;
-
-        const tileContent = this.object3d.getObjectByProperty('tileId', c3DTFeature.tileId);
-        tileContent.traverse((child) => {
-            if (child.geometry && child.geometry.attributes._BATCHID) {
-                c3DTFeature.groups.forEach((group) => {
-                    const positionIndexStart = group.start * 3;
-                    const positionIndexCount = (group.start + group.count) * 3;
-
-                    for (let index = positionIndexStart; index < positionIndexCount; index += 3) {
-                        const x = child.geometry.attributes.position.array[index];
-                        const y = child.geometry.attributes.position.array[index + 1];
-                        const z = child.geometry.attributes.position.array[index + 2];
-
-                        target.max.x = Math.max(x, target.max.x);
-                        target.max.y = Math.max(y, target.max.y);
-                        target.max.z = Math.max(z, target.max.z);
-
-                        target.min.x = Math.min(x, target.min.x);
-                        target.min.y = Math.min(y, target.min.y);
-                        target.min.z = Math.min(z, target.min.z);
-                    }
-                });
-
-                target.applyMatrix4(child.matrixWorld);
-            }
-        });
-
-        return target;
     }
 
     /**
      * Update style of the C3DTFeatures, an allowList of tile id can be passed to only update certain tile.
      * Note that this function only update THREE.Object3D materials, in order to see style changes you should call view.notifyChange()
-     *
      * @param {Array<number>|null} [allowTileIdList] - tile ids to allow in updateStyle computation if null all tiles are updated
+     *
      * @returns {boolean} true if style updated false otherwise
      */
     updateStyle(allowTileIdList = null) {
         if (!this._style) {
             return false;
         }
+        if (!this.object3d) {
+            return false;
+        }
 
         const currentMaterials = [];// list materials used for this update
-        this.object3d.traverse((object) => {
-            if (this.tilesC3DTileFeatures.has(object.tileId)) {
-                // object is a tile content
-                const c3DTileFeatures = this.tilesC3DTileFeatures.get(object.tileId);
-                object.traverse((child) => {
-                    if (child.geometry && child.geometry.attributes._BATCHID) {
-                        // check if tile feature should be updated
-                        if (!(allowTileIdList && !allowTileIdList.includes(object.tileId))) {
-                            // clear
-                            child.geometry.clearGroups();
-                            child.material = [];
 
-                            // eslint-disable-next-line no-unused-vars
-                            for (const [batchId, c3DTileFeature] of c3DTileFeatures) {
-                                /** @type {THREE.Color} */
-                                let color = null;
-                                if (typeof this._style.fill.color === 'function') {
-                                    color = new THREE.Color(this._style.fill.color(c3DTileFeature));
-                                } else {
-                                    color = new THREE.Color(this._style.fill.color);
-                                }
+        const mapObjects3d = new Map();
+        this.object3d.traverse((child) => {
+            if (object3DHasFeature(child)) {
+                const tileId = findTileID(child);
 
-                                /** @type {number} */
-                                let opacity = null;
-                                if (typeof this._style.fill.opacity === 'function') {
-                                    opacity = this._style.fill.opacity(c3DTileFeature);
-                                } else {
-                                    opacity = this._style.fill.opacity;
-                                }
+                if (allowTileIdList && !allowTileIdList.includes(tileId)) {
+                    return; // this tileId is not updated
+                }
 
-                                const materialId = color.getHexString() + opacity;
-
-                                let material = null;
-                                if (this.#fillColorMaterialsBuffer.has(materialId)) {
-                                    material = this.#fillColorMaterialsBuffer.get(materialId);
-                                } else {
-                                    material = new THREE.MeshStandardMaterial({ color, opacity, transparent: opacity < 1, alphaTest: 0.09 });
-                                    this.#fillColorMaterialsBuffer.set(materialId, material);// bufferize
-                                }
-
-                                // compute materialIndex
-                                let materialIndex = -1;
-                                for (let index = 0; index < child.material.length; index++) {
-                                    const childMaterial = child.material[index];
-                                    if (material.uuid === childMaterial.uuid) {
-                                        materialIndex = index;
-                                        break;
-                                    }
-                                }
-                                if (materialIndex < 0) {
-                                    // not in child.material add it
-                                    child.material.push(material);
-                                    materialIndex = child.material.length - 1;
-                                }
-
-                                // materialIndex groups is computed
-                                c3DTileFeature.groups.forEach((group) => {
-                                    child.geometry.addGroup(group.start, group.count, materialIndex);
-                                });
-                            }
-
-                            optimizeGeometryGroups(child);
-                        }
-
-                        // record material(s) used in child
-                        if (child.material instanceof Array) {
-                            child.material.forEach((material) => {
-                                if (!currentMaterials.includes(material)) {
-                                    currentMaterials.push(material);
-                                }
-                            });
-                        } else if (!currentMaterials.includes(child.material)) {
-                            currentMaterials.push(child.material);
-                        }
-                    }
-                });
+                // push for update style
+                if (!mapObjects3d.has(tileId)) {
+                    mapObjects3d.set(tileId, []);
+                }
+                mapObjects3d.get(tileId).push(child);
             }
         });
+
+        for (const [tileId, objects3d] of mapObjects3d) {
+            const c3DTileFeatures = this.tilesC3DTileFeatures.get(tileId); // features of this tile
+            objects3d.forEach((object3d) => {
+                // clear
+                object3d.geometry.clearGroups();
+                object3d.material = [];
+
+                for (const [, c3DTileFeature] of c3DTileFeatures) {
+                    if (c3DTileFeature.object3d != object3d) {
+                        continue;// this feature do not belong to object3d
+                    }
+
+                    this._style.context.setGeometry({
+                        properties: c3DTileFeature,
+                    });
+
+                    /** @type {THREE.Color} */
+                    const color = new THREE.Color(this._style.fill.color);
+
+                    /** @type {number} */
+                    const opacity = this._style.fill.opacity;
+
+                    const materialId = color.getHexString() + opacity;
+
+                    let material = null;
+                    if (this.#fillColorMaterialsBuffer.has(materialId)) {
+                        material = this.#fillColorMaterialsBuffer.get(materialId);
+                    } else {
+                        material = new THREE.MeshStandardMaterial({ color, opacity, transparent: opacity < 1, alphaTest: 0.09 });
+                        this.#fillColorMaterialsBuffer.set(materialId, material);// bufferize
+                    }
+
+                    // compute materialIndex
+                    let materialIndex = -1;
+                    for (let index = 0; index < object3d.material.length; index++) {
+                        const childMaterial = object3d.material[index];
+                        if (material.uuid === childMaterial.uuid) {
+                            materialIndex = index;
+                            break;
+                        }
+                    }
+                    if (materialIndex < 0) {
+                        // not in object3d.material add it
+                        object3d.material.push(material);
+                        materialIndex = object3d.material.length - 1;
+                    }
+
+                    // materialIndex groups is computed
+                    c3DTileFeature.groups.forEach((group) => {
+                        object3d.geometry.addGroup(group.start, group.count, materialIndex);
+                    });
+                }
+
+                optimizeGeometryGroups(object3d);
+
+                // record material(s) used in object3d
+                if (object3d.material instanceof Array) {
+                    object3d.material.forEach((material) => {
+                        if (!currentMaterials.includes(material)) {
+                            currentMaterials.push(material);
+                        }
+                    });
+                } else if (!currentMaterials.includes(object3d.material)) {
+                    currentMaterials.push(object3d.material);
+                }
+            });
+        }
 
         // remove buffered materials not in currentMaterials
         for (const [id, fillMaterial] of this.#fillColorMaterialsBuffer) {
@@ -497,7 +462,13 @@ class C3DTilesLayer extends GeometryLayer {
     }
 
     set style(value) {
-        this._style = value;
+        if (value instanceof Style) {
+            this._style = value;
+        } else if (!value) {
+            this._style = null;
+        } else {
+            this._style = new Style(value);
+        }
         this.updateStyle();
     }
 

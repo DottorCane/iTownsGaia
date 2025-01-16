@@ -1,6 +1,5 @@
 import Coordinates from 'Core/Geographic/Coordinates';
 import { FeatureCollection, FEATURE_TYPES } from 'Core/Feature';
-import Style from 'Core/Style';
 import { deprecatedParsingOptionsToNewOne } from 'Core/Deprecated/Undeprecator';
 
 function readCRS(json) {
@@ -74,7 +73,7 @@ const toFeature = {
 
         const geometry = feature.bindNewGeometry();
         geometry.properties = properties;
-        geometry.properties.style = new Style({}, feature.style).setFromGeojsonProperties(properties, feature.type);
+
         this.populateGeometry(crsIn, coordsIn, geometry, feature);
         feature.updateExtent(geometry);
     },
@@ -85,7 +84,6 @@ const toFeature = {
         }
         const geometry = feature.bindNewGeometry();
         geometry.properties = properties;
-        geometry.properties.style = new Style({}, feature.style).setFromGeojsonProperties(properties, feature.type);
 
         // Then read contour and holes
         for (let i = 0; i < coordsIn.length; i++) {
@@ -197,12 +195,12 @@ function jsonFeaturesToFeatures(crsIn, jsonFeatures, options) {
  */
 export default {
     /**
-     * Parse a GeoJSON file content and return a [FeatureCollection]{@link FeatureCollection}.
+     * Parse a GeoJSON file content and return a {@link FeatureCollection}.
      *
      * @param {string} json - The GeoJSON file content to parse.
      * @param {ParsingOptions} options - Options controlling the parsing.
 
-     * @return {Promise} A promise resolving with a [FeatureCollection]{@link FeatureCollection}.
+     * @return {Promise} A promise resolving with a {@link FeatureCollection}.
      */
     parse(json, options = {}) {
         options = deprecatedParsingOptionsToNewOne(options);
@@ -219,7 +217,9 @@ export default {
 
         if (out.filteringExtent) {
             if (typeof out.filteringExtent == 'boolean') {
-                out.filterExtent = json.extent.as(_in.crs);
+                out.filterExtent = options.extent.isExtent ?
+                    options.extent.as(_in.crs) :
+                    options.extent.toExtent(_in.crs);
             } else if (out.filteringExtent.isExtent) {
                 out.filterExtent = out.filteringExtent;
             }
