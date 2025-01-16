@@ -301,6 +301,15 @@
             }
 
             window.addEventListener('mousemove', picking, false);
+
+            function operazioneDaEseguire() {
+                wmsImageryLayer.source.layersVisibility = "pluto";
+                console.log("L'operazione è stata eseguita dopo 10 secondi!");
+
+            }
+            setTimeout(operazioneDaEseguire, 10000);
+
+
         </script>
     </body>
 </html>

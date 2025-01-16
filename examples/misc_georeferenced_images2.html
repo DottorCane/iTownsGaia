@@ -1,0 +1,114 @@
+<html>
+    <head>
+        <title>Itowns - Oriented image</title>
+        <link rel="stylesheet" type="text/css" href="css/example.css">
+        <style type="text/css">
+            #info {
+                color: black;
+                position: absolute;
+                bottom: 0;
+                right: 0;
+                margin-right: 15px;
+                padding: 0.3rem;
+                background-color: rgba(255, 255, 255, 0.493);
+                border: 2px solid black;
+                border-radius: 5px;
+            }
+        </style>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.6/dat.gui.min.js"></script>
+    </head>
+    <body>
+        <div id="viewerDiv">
+            <p id="info">
+                Picture taken by Walter Mittelholzer in 1919, metadata from
+                <a href="https://smapshot.heig-vd.ch/map/?imageId=2873" target="_blank"> smapshot.heig-vd.ch </a>
+            </p>
+        </div>
+        <script src="js/GUI/GuiTools.js"></script>
+        <script src="../dist/itowns.js"></script>
+        <script src="../dist/debug.js"></script>
+
+        <script src="js/OrtophotoHelper.js"></script>
+        <script src="lib/GaiaiTowns.js"></script>
+        <script src="lib/CustomControls.js"></script>
+        <script src="lib/CreateViewer.js"></script>
+        <script src="lib/OrtoPhoto.js"></script>
+
+        <script type="text/javascript">
+            //Registro l'EPSG usato in Italia
+            itowns.proj4.defs("EPSG:32633","+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs +type=crs");
+            itowns.proj4.defs("EPSG:32632","+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs +type=crs");
+            var pictureInfos;
+            var coord;
+            var rotationMatrix;
+            // eslint-disable-next-line no-unused-vars
+            var plane;
+            var camera;
+
+
+            itowns.Fetcher.json('http://portal.gaiatest.it:6080/gaia/maps/getMap/Ortophoto').then(loadGaiaMap);
+
+            let urlQuery = 'http://portal.gaiatest.it:6080/gaia/rest/services/SanNazzaro_OrtoPhoto/MapServer/0/query?f=json&where=1=1&returnGeometry=false&spatialRel=esriSpatialRelIntersects&outFields=*&outSR=3857';
+            //itowns.Fetcher.json('http://portal.gaiatest.it:6080/gaia/DB/GISDB/table/san_nazzaro_point_ortofoto/showContents/').then(readDataJsonPoint);
+            itowns.Fetcher.json(urlQuery).then(readDataJsonPoint);
+
+            var allPoints=[];
+            var indexPoint = 0;
+
+            function readDataJsonPoint(result){
+                var points = [];
+                result.features.forEach(feature => {
+                    var element =  feature.attributes;
+                    element.run = Number(element.run);
+                    if (element.run > 1){
+                        element.x = Number(element.x);
+                        element.y = Number(element.y);
+                        element.z = Number(element.z);
+                        element.roll = Number(element.roll);
+                        element.pitch = Number(element.pitch);
+                        element.heading = Number(element.heading);
+                        element.crs = "EPSG:3857";
+                        element.url = './layers/Ortophoto/SanNazzaro/' + element.run + "/" + element.foto;
+                        points.push(element);
+                    }
+                });
+                allPoints = points;
+            }
+
+            function updateImage(value){
+                indexPoint = indexPoint + value;
+                var nextPoint = allPoints[indexPoint];
+                //console.log(nextPoint);
+                if (nextPoint!==undefined){
+                    var coordInit = new itowns.Coordinates(nextPoint.crs, nextPoint.x, nextPoint.y, nextPoint.z);
+                    var coord = coordInit.as("EPSG:4326")
+                    OrtoPhoto.updateTexturedSphere('./layers/Ortophoto/SanNazzaro/' + nextPoint.run + "/" + nextPoint.foto,coord);
+                }else{
+                    indexPoint = indexPoint - value;
+                }
+            }
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 's' || event.key === 'S') {
+                    if (!OrtoPhoto.active){
+                        indexPoint = 20;
+                        var firstPoint = allPoints[indexPoint];
+                        OrtoPhoto.createEnvironment(view,firstPoint,CustomControls,allPoints);
+                    }
+                }
+                if (event.key === 'q' || event.key === 'Q') {
+                    OrtoPhoto.dispose();
+                }
+                if (event.key === 'w' || event.key === 'W') {
+                    updateImage(+1);
+                }
+                if (event.key === 'x' || event.key === 'X') {
+                    // Chiamata al metodo/funzione quando viene premuto il tasto M
+                    updateImage(-1);
+                }
+            });
+
+        </script>
+    </body>
+</html>
