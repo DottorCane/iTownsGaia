@@ -1,7 +1,7 @@
 {
-  "name": "itowns",
+  "name": "itownsGaia",
   "version": "2.44.2",
-  "description": "A JS/WebGL framework for 3D geospatial data visualization",
+  "description": "iTowns framework and custom code for Gaia server",
   "type": "module",
   "main": "lib/Main.js",
   "exports": {
@@ -49,13 +49,13 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/iTowns/itowns.git"
+    "url": "git+https://github.com/DottorCane/iTownsGaia.git"
   },
   "license": "(CECILL-B OR MIT)",
   "bugs": {
-    "url": "https://github.com/iTowns/itowns/issues"
+    "url": "https://github.com/DottorCane/iTownsGaia/issues"
   },
-  "homepage": "https://itowns.github.io/",
+  "homepage": "https://github.com/DottorCane/iTownsGaia",
   "dependencies": {
     "@mapbox/vector-tile": "^2.0.3",
     "@maplibre/maplibre-gl-style-spec": "^22.0.0",
