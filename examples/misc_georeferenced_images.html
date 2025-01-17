@@ -71,8 +71,8 @@
                 var layer = new itowns.ElevationLayer(config.id, config);
                 view.addLayer(layer).then(menuGlobe.addLayerGUI.bind(menuGlobe));
             }
-            itowns.Fetcher.json('./layers/JSONLayers/WORLD_DTM.json').then(addElevationLayerFromConfig);
             itowns.Fetcher.json('./layers/JSONLayers/IGN_MNT_HIGHRES.json').then(addElevationLayerFromConfig);
+            itowns.Fetcher.json('./layers/JSONLayers/WORLD_DTM.json').then(addElevationLayerFromConfig);
 
             pictureInfos = {
                 panoramic: {
@@ -141,8 +141,8 @@
             setupViewCameraDecomposing(view, camera);
 
             // open view camera FOV of 10° to see landscape around the picture.
-            view.camera.camera3D.fov += 10;
-            view.camera.camera3D.updateProjectionMatrix();
+            view.camera3D.fov += 10;
+            view.camera3D.updateProjectionMatrix();
 
             // uncomment to debug camera
             // addCameraHelper(view, camera);

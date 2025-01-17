@@ -51,8 +51,8 @@
                 var layer = new itowns.ElevationLayer(config.id, config);
                 view.addLayer(layer);
             }
-            itowns.Fetcher.json('./layers/JSONLayers/WORLD_DTM.json').then(addElevationLayerFromConfig);
             itowns.Fetcher.json('./layers/JSONLayers/IGN_MNT_HIGHRES.json').then(addElevationLayerFromConfig);
+            itowns.Fetcher.json('./layers/JSONLayers/WORLD_DTM.json').then(addElevationLayerFromConfig);
 
             var eptLayer, eptSource;
 
@@ -87,8 +87,10 @@
                 eptSource = new itowns.EntwinePointTileSource({ url });
 
                 if (eptLayer) {
-                    view.removeLayer('ept');
+                    debugGui.removeFolder(eptLayer.debugUI);
+                    view.removeLayer('Entwine Point Tile');
                     view.notifyChange();
+                    eptLayer.delete();
                 }
 
                 eptLayer = new itowns.EntwinePointTileLayer('Entwine Point Tile', {
@@ -98,7 +100,7 @@
 
                 itowns.View.prototype.addLayer.call(view, eptLayer).then(onLayerReady);
 
-                debug.PotreeDebug.initTools(view, eptLayer, debugGui);
+                debug.PointCloudDebug.initTools(view, eptLayer, debugGui);
             }
 
             readEPTURL();

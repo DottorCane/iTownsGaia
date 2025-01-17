@@ -50,17 +50,11 @@
                 var layer = new itowns.ElevationLayer(config.id, config);
                 view.addLayer(layer).then(menuGlobe.addLayerGUI.bind(menuGlobe));
             }
-            itowns.Fetcher.json('./layers/JSONLayers/WORLD_DTM.json').then(addElevationLayerFromConfig);
             itowns.Fetcher.json('./layers/JSONLayers/IGN_MNT_HIGHRES.json').then(addElevationLayerFromConfig);
-
-            function isValidData(data) {
-                if(data.features[0].geometries.length < 1000) {
-                    return data;
-                }
-            }
+            itowns.Fetcher.json('./layers/JSONLayers/WORLD_DTM.json').then(addElevationLayerFromConfig);
 
             var wfsBuildingSource = new itowns.WFSSource({
-                url: 'https://wxs.ign.fr/topographie/geoportail/wfs?',
+                url: 'https://data.geopf.fr/wfs/ows?',
                 version: '2.0.0',
                 typeName: 'BDTOPO_V3:batiment',
                 crs: 'EPSG:4326',
@@ -102,7 +96,6 @@
                         width: 2.0,
                     },
                 },
-                isValidData: isValidData,
                 source: wfsBuildingSource,
                 zoom: { max: 20, min: 13 },
             });

@@ -46,6 +46,9 @@
                 var view;
                 var controls;
 
+                // Define crs projection that we will use (taken from https://epsg.io/3946, Proj4js section)
+                itowns.proj4.defs('EPSG:3946', '+proj=lcc +lat_1=45.25 +lat_2=46.75 +lat_0=46 +lon_0=3 +x_0=1700000 +y_0=5200000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+
                 viewerDiv = document.getElementById('viewerDiv');
                 viewerDiv.style.display = 'block';
 
@@ -80,13 +83,13 @@
                 view.domElement.addEventListener('dblclick', dblClickHandler);
 
                 function placeCamera(position, lookAt) {
-                    view.camera.camera3D.position.copy(position);
-                    view.camera.camera3D.lookAt(lookAt);
+                    view.camera3D.position.copy(position);
+                    view.camera3D.lookAt(lookAt);
                     // create controls
                     controls = new itowns.FirstPersonControls(view, { focusOnClick: true });
                     debugGui.add(controls.options, 'moveSpeed', 1, 100).name('Movement speed');
 
-                    view.notifyChange(view.camera.camera3D);
+                    view.notifyChange(view.camera3D);
                 }
 
                 // add potreeLayer to scene
@@ -99,9 +102,9 @@
                     potreeLayer.root.bbox.getSize(size);
                     potreeLayer.root.bbox.getCenter(lookAt);
 
-                    debug.PotreeDebug.initTools(view, potreeLayer, debugGui);
+                    debug.PointCloudDebug.initTools(view, potreeLayer, debugGui);
 
-                    view.camera.camera3D.far = 2.0 * size.length();
+                    view.camera3D.far = 2.0 * size.length();
 
                     ratio = size.x / size.z;
                     position = potreeLayer.root.bbox.min.clone().add(
