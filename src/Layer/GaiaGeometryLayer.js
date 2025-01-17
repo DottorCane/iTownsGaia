@@ -59,7 +59,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
         this.material.defines = this.material.defines || {};
         this.mode = config.mode || PNTS_MODE.COLOR;
-        console.log("GaiaGeometryLayer");
+        //console.log("GaiaGeometryLayer");
     }
 
     createPointsElement(geometry){
