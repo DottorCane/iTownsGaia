@@ -98,6 +98,14 @@ export { default as CopcSource } from 'Source/CopcSource';
 export { default as GaiaGeometryLayer } from 'Layer/GaiaGeometryLayer';
 export { default as Gaia3DPointSource } from 'Source/Gaia3DPointSource';
 export { default as Gaia3DPointSource2 } from 'Source/Gaia3DPointSource2';
+//Widget
+export { default as Navigation } from 'Utils/gui/Navigation';
+export { default as Minimap } from 'Utils/gui//Minimap';
+export { default as Scale } from 'Utils/gui//Scale';
+export { default as Searchbar } from 'Utils/gui/./Searchbar';
+export { default as Widget } from 'Utils/gui//Widget';
+export { default as C3DTilesStyle } from 'Utils/gui//C3DTilesStyle';
+
 
 // Parsers provided by default in iTowns
 // Custom parser can be implemented as wanted, as long as the main function
