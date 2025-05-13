@@ -122,6 +122,9 @@ class WMSSource extends Source {
 
         this.isWMSSource = true;
         this.name = source.name;
+        //TODO: Aggiunta custom
+        this.layersVisibility = source.name;
+
         this.zoom = { min: 0, max: Infinity };
         this.style = source.style || '';
 
@@ -146,7 +149,10 @@ class WMSSource extends Source {
         const urlObj = new URL(this.url);
         urlObj.searchParams.set('SERVICE', 'WMS');
         urlObj.searchParams.set('REQUEST', 'GetMap');
-        urlObj.searchParams.set('LAYERS', this.name);
+        //urlObj.searchParams.set('LAYERS', this.name);
+        //TODO: Aggiunta custom
+        urlObj.searchParams.set('LAYERS', '%layers%');
+
         urlObj.searchParams.set('VERSION', this.version);
         urlObj.searchParams.set('STYLES', this.style);
         urlObj.searchParams.set('FORMAT', this.format);
@@ -170,7 +176,8 @@ class WMSSource extends Source {
         const extent = extentOrTile.isExtent ?
             extentOrTile.as(this.crs, _extent) :
             extentOrTile.toExtent(this.crs, _extent);
-        return URLBuilder.bbox(extent, this);
+        var url =  URLBuilder.bbox(extent, this);
+        return url.replace('%layers%',this.layersVisibility);
     }
 
     extentInsideLimit(extent) {
