@@ -76,6 +76,7 @@
                         tile = [result.tile];
                         z = result.coord.z;
                     }
+                    console.log(z)
                     return z + 5;
                 }
             }
@@ -119,9 +120,9 @@
 
                 style: {
                     stroke: {
-                        color: colorLine,
-                        base_altitude: altitudeLine,
-                        width: 5,
+                        color: color.set(0xFDFDFF),
+                        base_altitude: 200,
+                        width: 50,
                     }
                 }
             });

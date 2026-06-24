@@ -90,6 +90,12 @@ class Gaia3DPointSource extends TMSSource {
         return this.extent.intersectsExtent(extent);
     }
 
+    loadData(extent, out, options = {}) {
+        const url = this.urlFromExtent(extent);
+        const fetchOptions = { ...this.networkOptions, ...options };
+        return this.fetcher(url, fetchOptions).then(data => this.parse(data, { in: this, out, extent }));
+    }
+
 }
 
 export default Gaia3DPointSource;

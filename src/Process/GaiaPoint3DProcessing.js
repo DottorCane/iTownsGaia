@@ -75,31 +75,56 @@ export default {
             requester: node,
         };
         // console.log(`context.scheduler.execute, ${command.layer.id}`);
+        layer.stats.tilesLoading++;
         return context.scheduler.execute(command).then((featureMeshes) => {
+            layer.stats.tilesLoading--;
             node.layerUpdateState[layer.id].noMoreUpdatePossible();
 
             featureMeshes.forEach((geometry) => {
                 if (geometry) {
-                    const config = {};
-                    config.size = layer.pointSize;
-                    config.vertexColors = true;
-
-                    var key = geometry.inExtent.zoom + '_' + geometry.inExtent.row + '_' + geometry.inExtent.col;
-                    geometry.inExtent.key = key;
-
-                    //Cerco che l'elemento con questa chiave. Se è già presente nel layer non lo inserisco ancora
-                    for (const tilePoint of layer.object3d.children) {
-                        if (tilePoint.geometry.inExtent.key === key ){
+                    // Controllo se la tile è ancora visibile prima di processarla
+                    if (geometry.boundingBox && context && context.camera) {
+                        const boxBoundingBox = geometry.boundingBox;
+                        const tempCenter = new THREE.Vector3(
+                            (boxBoundingBox.max.x+boxBoundingBox.min.x)/2,
+                            (boxBoundingBox.max.y+boxBoundingBox.min.y)/2,
+                            (boxBoundingBox.max.z+boxBoundingBox.min.z)/2
+                        );
+                        var distSq = context.camera.camera3D.position.distanceToSquared(tempCenter);
+                        var visible = context.camera.isBox3Visible(boxBoundingBox, layer.object3d.matrixWorld);
+                        if (distSq < 10000) { visible = true; }
+                        if (visible && layer.checkTileVisibilitySq) { visible = layer.checkTileVisibilitySq(geometry.inExtent.zoom, distSq); }
+                        
+                        if (!visible) {
+                            geometry.dispose();
+                            layer.stats.tilesDiscarded++;
                             return;
                         }
                     }
 
-                    var material = new THREE.PointsMaterial(config);
-                    if (this.opacity<1){
-                        material.opacity = this.opacity;
-                        material.transparent = true;
+                    var key = geometry.inExtent.zoom + '_' + geometry.inExtent.row + '_' + geometry.inExtent.col;
+                    geometry.inExtent.key = key;
+
+                    // Cerco l'elemento con questa chiave
+                    for (let i = 0; i < layer.object3d.children.length; i++) {
+                        if (layer.object3d.children[i].geometry.inExtent.key === key ) {
+                            return;
+                        }
                     }
-                    // const material = new THREE.PointsMaterial({ color: 0x000000 });
+
+                    // Riutilizzo il materiale condiviso o ne creo uno se non disponibile (fallback)
+                    var material = layer._sharedPointsMaterial;
+                    if (!material) {
+                        const config = {};
+                        config.size = layer.pointSize;
+                        config.vertexColors = true;
+                        material = new THREE.PointsMaterial(config);
+                        if (layer.opacity < 1){
+                            material.opacity = layer.opacity;
+                            material.transparent = true;
+                        }
+                    }
+
                     const points = new THREE.Points(geometry, material);
                     points.zoom = geometry.inExtent.zoom;
                     points.lastTimeVisible = 0;
@@ -149,6 +174,9 @@ export default {
                 }
             });
         },
-        err => handlingError(err, node, layer, node.level, context.view));
+        (err) => {
+            layer.stats.tilesLoading--;
+            handlingError(err, node, layer, node.level, context.view);
+        });
     },
 };

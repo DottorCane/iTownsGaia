@@ -99,6 +99,7 @@
                 source: wfsBuildingSource,
                 zoom: { max: 20, min: 13 },
             });
+            console.log(wfsBuildingLayer);
             view.addLayer(wfsBuildingLayer);
             FeatureToolTip.addLayer(wfsBuildingLayer, {
                 filterGeometries: function _(features, layer) {

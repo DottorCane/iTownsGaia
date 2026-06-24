@@ -50,7 +50,7 @@
 
             var placement = {
                 coord: new itowns.Coordinates('EPSG:4326',  4.631512, 43.675626),
-                range: 100,
+                range: 1000,
                 tilt: 45,
                 heading: -60
             }
@@ -61,10 +61,17 @@
             view.controls.minDistance = 0;
 
             // Configure Point Cloud layer
-            potreeLayer = new itowns.PotreeLayer('eglise_saint_blaise_arles', {
+            var potreeLayerOld = new itowns.PotreeLayer('eglise_saint_blaise_arles', {
                 source: new itowns.PotreeSource({
                     file: 'eglise_saint_blaise_arles.js',
                     url: 'https://raw.githubusercontent.com/gmaillet/dataset/master/',
+                    crs: view.referenceCrs,
+                }),
+            });
+            potreeLayer = new itowns.PotreeLayer('eglise_saint_blaise_arles', {
+                source: new itowns.PotreeSource({
+                    file: 'eglise_saint_blaise_arles.js',
+                    url: 'http://portal.gaiaTest.it:6080/gaia/data/getItem/Default/PointCloud/ddf3eb30-3511-43c4-8acf-f560f884fb49/eglise_saint_blaise_arles/',
                     crs: view.referenceCrs,
                 }),
             });
