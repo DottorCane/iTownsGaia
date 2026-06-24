@@ -6,8 +6,21 @@ import GaiaPoint3DProcessing from 'Process/GaiaPoint3DProcessing';
 import PointsMaterial, { PNTS_MODE } from 'Renderer/PointsMaterial';
 import Feature2Mesh from 'Converter/Feature2Mesh';
 import Extent from 'Core/Geographic/Extent';
+import Tile from 'Core/Tile/Tile';
+import Coordinates from 'Core/Geographic/Coordinates';
 
 const _tempBoxCenter = new THREE.Vector3();
+const _tempBox3 = new THREE.Box3();
+
+// Oggetti riusabili per il calcolo dei bounding box delle tile zoom-21
+// (evita allocazioni nel loop di preUpdate)
+const _camCoords4978 = new Coordinates('EPSG:4978', 0, 0, 0);
+const _cornerSW = new Coordinates('EPSG:4326', 0, 0, 0);
+const _cornerNE = new Coordinates('EPSG:4326', 0, 0, 0);
+const _tileExt4326 = new Extent('EPSG:4326', [0, 0, 0, 0]);
+const _tempTile = new Tile('EPSG:3857', 21, 0, 0);
+const HALF_WORLD_3857 = 20037508.342789244;
+const MAX_TILE_CANDIDATES = 400; // Limite di sicurezza
 
 /**
  *
@@ -71,14 +84,55 @@ class GaiaGeometryLayer extends GeometryLayer {
             tilesDiscarded: 0
         };
 
-        this._pendingTiles = new Map();
-        this._sharedPointsMaterial = new THREE.PointsMaterial({
-            size: this.pointSize,
-            vertexColors: true,
-            opacity: this.opacity,
-            transparent: this.opacity < 1
-        });
+        this._pendingTiles = new Map();  // key -> AbortController, per tile in download
+        this._tileQueue = [];            // coda da ordinare per zoom: [{extent, zoom}]
+        this._maxConcurrentDownloads = 4; // download simultanei massimi
+
+        // Strategia di priorità: 'distance' | 'zoomAsc' | 'zoomDesc'
+        // distance  = tile più vicina alla camera prima (default)
+        // zoomAsc   = zoom basso prima (panoramica prima)
+        // zoomDesc  = zoom alto prima (dettaglio prima)
+        this.priorityMode = 'distance';
+
+        // Fattore di scala dei punti per zoom: i livelli bassi hanno punti più grandi
+        // per compensare la bassa densità. Può essere sovrascritto dall'utente.
+        this.pointSizeScaleFactor = 0.6; // moltiplicatore per zoom step
+        this.maxZoomRef = 21;             // zoom di riferimento (punti più piccoli)
+
+        // Cache di materiali per zoom level (creati on-demand)
+        this._materialsByZoom = new Map();
         //console.log("GaiaGeometryLayer");
+    }
+
+    /**
+     * Calcola la dimensione dei punti per un dato zoom level.
+     * Zoom basso → punti grandi. Zoom alto (dettaglio) → punti piccoli.
+     *
+     * @param {number} zoom
+     * @returns {number}
+     */
+    pointSizeForZoom(zoom) {
+        const zoomDiff = this.maxZoomRef - zoom;
+        return this.pointSize * (1 + zoomDiff * this.pointSizeScaleFactor);
+    }
+
+    /**
+     * Restituisce (o crea) il materiale condiviso per un dato zoom level.
+     *
+     * @param {number} zoom
+     * @returns {THREE.PointsMaterial}
+     */
+    getMaterialForZoom(zoom) {
+        if (!this._materialsByZoom.has(zoom)) {
+            const mat = new THREE.PointsMaterial({
+                size: this.pointSizeForZoom(zoom),
+                vertexColors: true,
+                opacity: this.opacity,
+                transparent: this.opacity < 1,
+            });
+            this._materialsByZoom.set(zoom, mat);
+        }
+        return this._materialsByZoom.get(zoom);
     }
 
     createPointsElement(geometry){
@@ -95,7 +149,7 @@ class GaiaGeometryLayer extends GeometryLayer {
             }
         }
 
-        const points = new THREE.Points(geometry, this._sharedPointsMaterial);
+        const points = new THREE.Points(geometry, this.getMaterialForZoom(geometry.inExtent.zoom));
         points.zoom = geometry.inExtent.zoom;
         points.lastTimeVisible = 0;
 
@@ -153,10 +207,13 @@ class GaiaGeometryLayer extends GeometryLayer {
     }
 
     updateMaterial(){
-        this._sharedPointsMaterial.size = this.pointSize;
-        this._sharedPointsMaterial.opacity = this.opacity;
-        this._sharedPointsMaterial.transparent = this.opacity < 1;
-        this._sharedPointsMaterial.needsUpdate = true;
+        // Aggiorna tutti i materiali in cache (uno per zoom level)
+        for (const [zoom, mat] of this._materialsByZoom.entries()) {
+            mat.size = this.pointSizeForZoom(zoom);
+            mat.opacity = this.opacity;
+            mat.transparent = this.opacity < 1;
+            mat.needsUpdate = true;
+        }
     }
     updatePosition(){
         for (const tilePoint of this.object3d.children) {
@@ -171,18 +228,48 @@ class GaiaGeometryLayer extends GeometryLayer {
         //console.log(elt);
     }
 
-    requestLoadTile(extent, dictAllTile, context) {
-        var that = this;
-        var key = this.calcKeyExtent(extent);
-        if (dictAllTile[key] || this._pendingTiles.has(key)){
+    // Accoda una richiesta senza scatenare il download subito
+    enqueueLoadTile(extent, dictAllTile, distanceSq) {
+        const key = this.calcKeyExtent(extent);
+        if (dictAllTile[key] || this._pendingTiles.has(key)) {
             return;
         }
-        
+        // Segna come pending subito per evitare duplicati nello stesso frame
+        this._pendingTiles.set(key, null);
+        // Salva sia distanza che zoom per supportare tutte le strategie di ordinamento
+        this._tileQueue.push({ extent, key, distanceSq: distanceSq || 0, zoom: extent.zoom });
+    }
+
+    // Scarica fino a maxConcurrentDownloads tile dalla coda, ordinate per distanza ASC
+    flushTileQueue(context) {
+        if (this._tileQueue.length === 0) { return; }
+
+        // Ordina in base alla strategia scelta
+        const mode = this.priorityMode || 'distance';
+        if (mode === 'distance') {
+            this._tileQueue.sort((a, b) => a.distanceSq - b.distanceSq);
+        } else if (mode === 'zoomAsc') {
+            this._tileQueue.sort((a, b) => a.zoom - b.zoom);
+        } else if (mode === 'zoomDesc') {
+            this._tileQueue.sort((a, b) => b.zoom - a.zoom);
+        }
+        // 'fifo': nessun ordinamento, si processa in ordine di arrivo
+
+        const slots = this._maxConcurrentDownloads - (this.stats.tilesLoading);
+        const toDispatch = this._tileQueue.splice(0, Math.max(0, slots));
+
+        for (const item of toDispatch) {
+            this._doLoadTile(item.extent, item.key, context);
+        }
+    }
+
+    _doLoadTile(extent, key, context) {
+        var that = this;
         const controller = new AbortController();
         this._pendingTiles.set(key, controller);
 
         var promise = this.source.loadData(extent, this, { signal: controller.signal });
-        if (promise==undefined || promise == null){
+        if (promise == undefined || promise == null) {
             this._pendingTiles.delete(key);
             return;
         }
@@ -191,6 +278,8 @@ class GaiaGeometryLayer extends GeometryLayer {
             function(v) {
                 that._pendingTiles.delete(key);
                 that.stats.tilesLoading--;
+
+                // Scarta se non più visibile
                 if (v && v.boundingBox && context && context.camera) {
                     _tempBoxCenter.set(
                         (v.boundingBox.max.x+v.boundingBox.min.x)/2,
@@ -201,29 +290,63 @@ class GaiaGeometryLayer extends GeometryLayer {
                     var visible = context.camera.isBox3Visible(v.boundingBox, that.object3d.matrixWorld);
                     if (distSq < 10000) { visible = true; }
                     if (visible) { visible = that.checkTileVisibilitySq(v.inExtent.zoom, distSq); }
-                    
+
                     if (!visible) {
                         v.dispose();
                         that.stats.tilesDiscarded++;
-                        return; // Scarta la tile che non serve più
+                        // Libera uno slot e avanza la coda
+                        that.flushTileQueue(context);
+                        return;
                     }
                 }
 
                 var points = that.createPointsElement(v);
-                if (points!=null) {
+                if (points != null) {
                     that.object3d.add(points);
                     that.object3d.updateMatrixWorld();
                 }
+                // Libera uno slot e avanza la coda
+                that.flushTileQueue(context);
             },
             function(e) {
                 that._pendingTiles.delete(key);
                 that.stats.tilesLoading--;
-                //Error
+                that.flushTileQueue(context);
             }
         );
     }
+
+    requestLoadTile(extent, dictAllTile, distanceSq) {
+        // Mantenuto per compatibilità ma ora usa la coda
+        this.enqueueLoadTile(extent, dictAllTile, distanceSq);
+    }
+
+    /**
+     * Svuota tutta la coda, cancella i download in corso e rimuove le tile zoom-21
+     * dalla scena. Al frame successivo preUpdate le ri-enumera con il modo corrente.
+     */
+    clearAndReload() {
+        // 1. Abort tutti i download in corso
+        for (const [key, controller] of this._pendingTiles.entries()) {
+            if (controller) { controller.abort(); }
+        }
+        this._pendingTiles.clear();
+
+        // 2. Svuota la coda
+        this._tileQueue = [];
+        this.stats.tilesLoading = 0;
+
+        // 3. Rimuovi dalla scena tutte le tile zoom-21 (verranno ri-richieste)
+        for (let i = this.object3d.children.length - 1; i >= 0; i--) {
+            const item = this.object3d.children[i];
+            if (item.zoom === 21) {
+                if (item.geometry) { item.geometry.dispose(); }
+                this.object3d.remove(item);
+            }
+        }
+    }
+
     preUpdate(context, sources) {
-        //console.log(context);
         var camera = context.camera;
         var cameraPosition = camera.camera3D.position;
         var projectionMatrix = camera.camera3D.projectionMatrix;
@@ -232,67 +355,120 @@ class GaiaGeometryLayer extends GeometryLayer {
         var tileVisible = 0;
         var tileNotVisible = 0;
         var tileDraw = 0;
-        var boxCenter = new THREE.Vector3(0,0,0);
         frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(projectionMatrix, viewMatrix));
-        var dictTileSearchZoom = [];
-        var dictAllTile = {}
+
+        // ─── Aggiorna visibilità delle tile GIÀ in scena ──────────────────────────
+        var dictAllTile = {};
         for (const tilePoint of this.object3d.children) {
-            //traccio tutte le tile che sono lette in un dizionario
             dictAllTile[tilePoint.geometry.inExtent.key] = true;
-            var visible = false;
 
-            var boxBoundingBox = tilePoint.geometry.boundingBox;
+            const boxBoundingBox = tilePoint.geometry.boundingBox;
             _tempBoxCenter.set(
-                (boxBoundingBox.max.x+boxBoundingBox.min.x)/2,
-                (boxBoundingBox.max.y+boxBoundingBox.min.y)/2,
-                (boxBoundingBox.max.z+boxBoundingBox.min.z)/2
+                (boxBoundingBox.max.x + boxBoundingBox.min.x) / 2,
+                (boxBoundingBox.max.y + boxBoundingBox.min.y) / 2,
+                (boxBoundingBox.max.z + boxBoundingBox.min.z) / 2
             );
+            const distanceSqCalc = camera.camera3D.position.distanceToSquared(_tempBoxCenter);
 
-            var distanceSqCalc = camera.camera3D.position.distanceToSquared(_tempBoxCenter);
+            let visible = context.camera.isBox3Visible(boxBoundingBox, this.object3d.matrixWorld);
 
-            visible = context.camera.isBox3Visible(tilePoint.geometry.boundingBox, this.object3d.matrixWorld);
+            // Soglia di prossimità: tile entro 100m sempre visibili (workaround per falsi negativi)
+            if (distanceSqCalc < 10000) { visible = true; }
 
-            //Se la tile è più vicina di 100 metri la lascio sempre accesa.
-            //Per qualche motivo non chiaro alcuni box pur essendo visibili quando ci si avvicina, vengono segnalati
-            //come non visibili. Questa soglia risolve il problema, pur lasciando accese delle tile non visibili.
-            if (distanceSqCalc < 10000){
-                //console.log(Math.sqrt(distanceSqCalc));
-                visible = true;
-                //Salvo gli extent con scala 20 per vedere se quelle di livello 21 sono già caricate oppure se vanno recuperate
-                if (tilePoint.zoom==20){
-                    dictTileSearchZoom.push(tilePoint.geometry.inExtent)
-                }
-            }
-
-            if (visible){
-                visible = this.checkTileVisibilitySq(tilePoint.zoom, distanceSqCalc);
-            }
-            /*
-            //Le tile di livello 20 sono molto pesante e quindi vanno mostrate solo a scale basse
-            if (tilePoint.zoom==20 && visible) {
-                var boxCenter = tilePoint.geometry.boundingBox.min;
-                var distance = boxCenter.distanceTo(cameraPosition);
-                tilePoint.distance = distance;
-                checkTileVisibility()
-                if (distance>250) {
-                    visible=false;
-                }
-            }*/
+            if (visible) { visible = this.checkTileVisibilitySq(tilePoint.zoom, distanceSqCalc); }
 
             if (visible) {
                 tilePoint.visible = true;
                 tilePoint.lastTimeVisible = 0;
-                //tilePoint.geometry.setDrawRange(0, tilePoint.geometry.numFeature);
                 tileVisible++;
-            }else{
+            } else {
                 tilePoint.visible = false;
-                //tilePoint.geometry.setDrawRange(0, 0);
                 tileNotVisible++;
-                if (tilePoint.lastTimeVisible == 0){
+                if (tilePoint.lastTimeVisible == 0) {
                     tilePoint.lastTimeVisible = Date.now();
                 }
             }
         }
+        // ──────────────────────────────────────────────────────────────────────────
+
+        // ─── Enumerazione deterministca delle tile zoom-21 visibili ───────────────
+        // Non dipende dai parent caricati: calcola direttamente dalla posizione
+        // della camera quali tile zoom-21 intersecano il frustum.
+
+        const ZOOM_DETAIL = 21;
+        const camPos = camera.camera3D.position;
+        const matrixWorld = this.object3d.matrixWorld;
+
+        // Converto la camera in EPSG:4326 tramite EPSG:4978
+        _camCoords4978.setFromValues(camPos.x, camPos.y, camPos.z);
+        const camGeo = _camCoords4978.as('EPSG:4326');
+        const camAlt = Math.abs(camGeo.z);
+
+        // Raggio di ricerca: almeno 100m, scala con l'altitudine
+        const searchRadius = Math.min(500, Math.max(100, camAlt * 2));
+
+        // Calcola il range di tile zoom-21 in EPSG:3857 che coprono il cerchio
+        const numTiles21 = 2 ** ZOOM_DETAIL;
+        const tileSize3857 = (2 * HALF_WORLD_3857) / numTiles21;
+
+        // Converto la posizione camera in EPSG:3857
+        const camGeo3857 = _camCoords4978.as('EPSG:3857');
+        const camX = camGeo3857.x;
+        const camY = camGeo3857.y;
+
+        const colMin = Math.max(0, Math.floor((camX - searchRadius + HALF_WORLD_3857) / tileSize3857));
+        const colMax = Math.min(numTiles21 - 1, Math.floor((camX + searchRadius + HALF_WORLD_3857) / tileSize3857));
+        const rowMin = Math.max(0, Math.floor((HALF_WORLD_3857 - (camY + searchRadius)) / tileSize3857));
+        const rowMax = Math.min(numTiles21 - 1, Math.floor((HALF_WORLD_3857 - (camY - searchRadius)) / tileSize3857));
+
+        // Stima altitudine massima dell'edificio per il bounding box 3D
+        const estimatedMaxHeight = Math.max(camAlt + 50, 200);
+
+        var visibleTilesKeys = new Set();
+        let candidateCount = 0;
+
+        for (let row = rowMin; row <= rowMax && candidateCount < MAX_TILE_CANDIDATES; row++) {
+            for (let col = colMin; col <= colMax && candidateCount < MAX_TILE_CANDIDATES; col++) {
+                candidateCount++;
+
+                // Calcola l'extent geografico esatto di questa tile (deterministico, zero I/O)
+                _tempTile.set(ZOOM_DETAIL, row, col);
+                _tempTile.toExtent('EPSG:4326', _tileExt4326);
+
+                // Costruisce il Box3 3D dai 2 angoli dell'extent (SW basso, NE alto)
+                _cornerSW.setFromValues(_tileExt4326.west, _tileExt4326.south, 0);
+                _cornerNE.setFromValues(_tileExt4326.east, _tileExt4326.north, estimatedMaxHeight);
+                const pSW = _cornerSW.as('EPSG:4978');
+                const pNE = _cornerNE.as('EPSG:4978');
+
+                _tempBox3.min.set(
+                    Math.min(pSW.x, pNE.x),
+                    Math.min(pSW.y, pNE.y),
+                    Math.min(pSW.z, pNE.z)
+                );
+                _tempBox3.max.set(
+                    Math.max(pSW.x, pNE.x),
+                    Math.max(pSW.y, pNE.y),
+                    Math.max(pSW.z, pNE.z)
+                );
+
+                // Test frustum: se non visibile, salta (zero rete!)
+                if (!context.camera.isBox3Visible(_tempBox3, matrixWorld)) {
+                    continue;
+                }
+
+                // Distanza dalla camera (usata per ordinare la coda dei download)
+                _tempBox3.getCenter(_tempBoxCenter);
+                const distSq = camPos.distanceToSquared(_tempBoxCenter);
+
+                const ext = new Extent('EPSG:3857', ZOOM_DETAIL, row, col);
+                const key = this.calcKeyExtent(ext);
+                visibleTilesKeys.add(key);
+                this.requestLoadTile(ext, dictAllTile, distSq);
+            }
+        }
+        // ──────────────────────────────────────────────────────────────────────────
+
 
         var timeToDelete = 5000;
         var timeNow = Date.now();
@@ -308,35 +484,21 @@ class GaiaGeometryLayer extends GeometryLayer {
             }
         }
 
-        //Verifico se ci sono Tile di livello 21 da leggere
-        var visibleTilesKeys = new Set();
-        for (var i=0;i<dictTileSearchZoom.length;i++){
-            var extentTemp = dictTileSearchZoom[i];
-            //Ogni tile ha quattro figli
-            var ext1 = new Extent(extentTemp.crs, 21, (extentTemp.row*2), (extentTemp.col*2));
-            var ext2 = new Extent(extentTemp.crs, 21, (extentTemp.row*2)+1, (extentTemp.col*2));
-            var ext3 = new Extent(extentTemp.crs, 21, (extentTemp.row*2), (extentTemp.col*2)+1);
-            var ext4 = new Extent(extentTemp.crs, 21, (extentTemp.row*2)+1, (extentTemp.col*2)+1);
-            
-            visibleTilesKeys.add(this.calcKeyExtent(ext1));
-            visibleTilesKeys.add(this.calcKeyExtent(ext2));
-            visibleTilesKeys.add(this.calcKeyExtent(ext3));
-            visibleTilesKeys.add(this.calcKeyExtent(ext4));
 
-            this.requestLoadTile(ext1,dictAllTile, context);
-            this.requestLoadTile(ext2,dictAllTile, context);
-            this.requestLoadTile(ext3,dictAllTile, context);
-            this.requestLoadTile(ext4,dictAllTile, context);
-        }
-
-        // Abort pending tiles that are no longer needed
+        // Abort pending tiles che non servono più
         for (const [key, controller] of this._pendingTiles.entries()) {
             if (!visibleTilesKeys.has(key)) {
-                controller.abort();
+                if (controller) { controller.abort(); }
                 this._pendingTiles.delete(key);
-                this.stats.tilesDiscarded++; 
+                this.stats.tilesDiscarded++;
             }
         }
+        // Svuota anche la coda interna dei tile accodati ma non ancora avviati
+        this._tileQueue = this._tileQueue.filter(item => visibleTilesKeys.has(item.key));
+
+        // Avvia i download ordinati per zoom
+        this.flushTileQueue(context);
+
 
         //Calcolo il numero massimo di punti da visualizzare per gli elementi attivi
         let numElement = 0;

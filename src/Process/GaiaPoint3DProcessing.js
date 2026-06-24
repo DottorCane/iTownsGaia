@@ -8,6 +8,8 @@ import Extent from 'Core/Geographic/Extent';
 //import PointsMaterial, { MODE } from 'Renderer/PointsMaterial';
 
 const coord = new Coordinates('EPSG:4326', 0, 0, 0);
+// Pre-allocato a livello di modulo per evitare allocazioni nel forEach delle tile
+const _tileCenter = new THREE.Vector3();
 
 export default {
     update(context, layer, node) {
@@ -67,12 +69,35 @@ export default {
         // console.log(`YES UpdatePossible, ${layer.id}`);
         node.layerUpdateState[layer.id].newTry();
 
+        // Calcola la priorità in base alla strategia configurata sul layer
+        const mode = layer.priorityMode || 'distance';
+        let priority = 1;
+        if (mode === 'distance') {
+            if (node.boundingVolume && node.boundingVolume.box) {
+                const center = node.boundingVolume.box.getCenter(_tileCenter);
+                const dist = context.camera.camera3D.position.distanceTo(center);
+                priority = 1.0 / (dist + 1);
+            } else if (node.obb) {
+                const dist = context.camera.camera3D.position.distanceTo(node.obb.position);
+                priority = 1.0 / (dist + 1);
+            } else {
+                priority = node.level; // fallback
+            }
+        } else if (mode === 'zoomAsc') {
+            priority = 100 - node.level; // zoom basso prima (panoramica)
+        } else if (mode === 'zoomDesc') {
+            priority = node.level;       // zoom alto prima (dettaglio)
+        } else { // fifo
+            priority = 1;
+        }
+
         const command = {
             layer,
             extentsSource: extentsDestination,
             view: context.view,
             threejsLayer: layer.threejsLayer,
             requester: node,
+            priority,
         };
         // console.log(`context.scheduler.execute, ${command.layer.id}`);
         layer.stats.tilesLoading++;
@@ -84,14 +109,14 @@ export default {
                 if (geometry) {
                     // Controllo se la tile è ancora visibile prima di processarla
                     if (geometry.boundingBox && context && context.camera) {
-                        const boxBoundingBox = geometry.boundingBox;
-                        const tempCenter = new THREE.Vector3(
-                            (boxBoundingBox.max.x+boxBoundingBox.min.x)/2,
-                            (boxBoundingBox.max.y+boxBoundingBox.min.y)/2,
-                            (boxBoundingBox.max.z+boxBoundingBox.min.z)/2
+                        const bb = geometry.boundingBox;
+                        _tileCenter.set(
+                            (bb.max.x + bb.min.x) / 2,
+                            (bb.max.y + bb.min.y) / 2,
+                            (bb.max.z + bb.min.z) / 2
                         );
-                        var distSq = context.camera.camera3D.position.distanceToSquared(tempCenter);
-                        var visible = context.camera.isBox3Visible(boxBoundingBox, layer.object3d.matrixWorld);
+                        var distSq = context.camera.camera3D.position.distanceToSquared(_tileCenter);
+                        var visible = context.camera.isBox3Visible(bb, layer.object3d.matrixWorld);
                         if (distSq < 10000) { visible = true; }
                         if (visible && layer.checkTileVisibilitySq) { visible = layer.checkTileVisibilitySq(geometry.inExtent.zoom, distSq); }
                         
