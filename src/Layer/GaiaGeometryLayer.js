@@ -183,7 +183,22 @@ class GaiaGeometryLayer extends GeometryLayer {
             config.transparent = this.opacity < 1;
         }
 
-        return new THREE.PointsMaterial(config);
+        const mat = new THREE.PointsMaterial(config);
+        
+        // PATCH SHADER: Impedisce ai punti di rimpicciolirsi troppo in prospettiva
+        // Questo garantisce che da chilometri di distanza restino visibili come polvere
+        // invece di scomparire a zero pixel a causa di sizeAttenuation.
+        mat.onBeforeCompile = (shader) => {
+            shader.vertexShader = shader.vertexShader.replace(
+                '#include <fog_vertex>',
+                `#include <fog_vertex>
+                 // Forza una dimensione minima su schermo (es. 2.5 pixel) per i dati lontani
+                 gl_PointSize = max(2.5, gl_PointSize);
+                `
+            );
+        };
+
+        return mat;
     }
 
     createPointsElement(geometry){
@@ -243,18 +258,10 @@ class GaiaGeometryLayer extends GeometryLayer {
     }
     
     // In base allo Zoom c'è una distanza minima che rende il layer visibile
-    checkTileVisibilitySq(zoom,distanceSq){
-        if (zoom == 21 ){
-            if (distanceSq > 150 * 150) { return false; }
-        }else if (zoom == 20 ){
-            if (distanceSq > 350 * 350) { return false; }
-        }else if (zoom == 19 ) {
-            if (distanceSq > 500 * 500) { return false; }
-        }else if (zoom == 18 ) {
-            if (distanceSq > 7500 * 7500) { return false; }
-        }else if (zoom == 17 ) {
-            if (distanceSq > 1000 * 1000) { return false; }
-        }
+    checkTileVisibilitySq(zoom, distanceSq) {
+        // Disabilitato: con il nuovo sistema di LOD basato su densità, i punti
+        // scalano perfettamente in lontananza. Non c'è più bisogno di scartare
+        // brutalmente le tile (es. zoom 21 scartato a soli 150m di distanza).
         return true;
     }
 
@@ -345,13 +352,22 @@ class GaiaGeometryLayer extends GeometryLayer {
 
                 // Scarta se non più visibile
                 if (v && v.boundingBox && context && context.camera) {
+                    // Clona e ingrandisce il bounding box per evitare che edifici molto alti 
+                    // escano dal frustum (schermo) causando la cancellazione dell'intera tile
+                    // quando in realtà la loro cima è ancora visibile (specialmente con viste a 45 gradi)
+                    const expandedBox = v.boundingBox.clone();
+                    expandedBox.expandByScalar(2000); // Espande di 2km in tutte le direzioni
+
                     _tempBoxCenter.set(
-                        (v.boundingBox.max.x+v.boundingBox.min.x)/2,
-                        (v.boundingBox.max.y+v.boundingBox.min.y)/2,
-                        (v.boundingBox.max.z+v.boundingBox.min.z)/2
+                        (expandedBox.max.x+expandedBox.min.x)/2,
+                        (expandedBox.max.y+expandedBox.min.y)/2,
+                        (expandedBox.max.z+expandedBox.min.z)/2
                     );
                     var distSq = context.camera.camera3D.position.distanceToSquared(_tempBoxCenter);
-                    var visible = context.camera.isBox3Visible(v.boundingBox, that.object3d.matrixWorld);
+                    
+                    // Controlla la visibilità usando il box espanso
+                    var visible = context.camera.isBox3Visible(expandedBox, that.object3d.matrixWorld);
+                    
                     if (distSq < 10000) { visible = true; }
                     if (visible) { visible = that.checkTileVisibilitySq(v.inExtent.zoom, distSq); }
 

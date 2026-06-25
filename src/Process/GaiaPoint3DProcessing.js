@@ -109,14 +109,16 @@ export default {
                 if (geometry) {
                     // Controllo se la tile è ancora visibile prima di processarla
                     if (geometry.boundingBox && context && context.camera) {
-                        const bb = geometry.boundingBox;
+                        const expandedBox = geometry.boundingBox.clone();
+                        expandedBox.expandByScalar(2000); // Espande per non cappare edifici alti a 45 gradi
+                        
                         _tileCenter.set(
-                            (bb.max.x + bb.min.x) / 2,
-                            (bb.max.y + bb.min.y) / 2,
-                            (bb.max.z + bb.min.z) / 2
+                            (expandedBox.max.x + expandedBox.min.x) / 2,
+                            (expandedBox.max.y + expandedBox.min.y) / 2,
+                            (expandedBox.max.z + expandedBox.min.z) / 2
                         );
                         var distSq = context.camera.camera3D.position.distanceToSquared(_tileCenter);
-                        var visible = context.camera.isBox3Visible(bb, layer.object3d.matrixWorld);
+                        var visible = context.camera.isBox3Visible(expandedBox, layer.object3d.matrixWorld);
                         if (distSq < 10000) { visible = true; }
                         if (visible && layer.checkTileVisibilitySq) { visible = layer.checkTileVisibilitySq(geometry.inExtent.zoom, distSq); }
                         
