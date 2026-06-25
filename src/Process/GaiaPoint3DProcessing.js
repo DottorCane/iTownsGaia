@@ -137,10 +137,10 @@ export default {
                         }
                     }
 
-                    // Utilizzo il materiale dinamico in base allo zoom se il layer lo supporta
+                    // Utilizzo il materiale dinamico calcolato sulla densità fisica della tile
                     var material;
-                    if (layer.getMaterialForZoom) {
-                        material = layer.getMaterialForZoom(geometry.inExtent.zoom);
+                    if (layer.createMaterialForGeometry) {
+                        material = layer.createMaterialForGeometry(geometry);
                     } else if (layer._sharedPointsMaterial) {
                         material = layer._sharedPointsMaterial;
                     } else {

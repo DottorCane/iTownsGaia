@@ -22,6 +22,25 @@ const _tempTile = new Tile('EPSG:3857', 21, 0, 0);
 const HALF_WORLD_3857 = 20037508.342789244;
 const MAX_TILE_CANDIDATES = 400; // Limite di sicurezza
 
+const _circleTexture = (function() {
+    if (typeof document === 'undefined') {
+        return null;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext('2d');
+    
+    // Disegniamo un cerchio solido netto invece di un gradiente sfumato
+    context.beginPath();
+    context.arc(32, 32, 30, 0, 2 * Math.PI, false);
+    context.fillStyle = 'white';
+    context.fill();
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+}());
+
 /**
  *
  * @property {boolean} isFeatureGeometryLayer - Used to checkout whether this layer is
@@ -94,8 +113,18 @@ class GaiaGeometryLayer extends GeometryLayer {
         // zoomDesc  = zoom alto prima (dettaglio prima)
         this.priorityMode = 'distance';
 
-        // Fattore di scala dei punti per zoom: i livelli bassi hanno punti più grandi
-        // per compensare la bassa densità. Può essere sovrascritto dall'utente.
+        // Abilita disabilita la texture sfumata (cerchi morbidi) invece dei quadrati base
+        this.useSplatting = config.useSplatting !== undefined ? config.useSplatting : true;
+
+        // Curva scalare configurabile per la dimensione dei punti in base allo zoom.
+        // Se definita, l'algoritmo fa un'interpolazione lineare tra questi livelli.
+        this.sizeScaleCurve = config.sizeScaleCurve || [
+            { z: 17, scale: 4.0 }, // A zoom basso, punti molto più grandi (per tappare i buchi)
+            { z: 19, scale: 2.0 }, // A zoom intermedio, punti medi
+            { z: 21, scale: 1.0 }  // A zoom altissimo, dimensione base esatta (1x)
+        ];
+
+        // Fattore di scala dei punti per zoom (vecchio metodo, mantenuto come fallback)
         this.pointSizeScaleFactor = 0.6; // moltiplicatore per zoom step
         this.maxZoomRef = 21;             // zoom di riferimento (punti più piccoli)
 
@@ -104,36 +133,57 @@ class GaiaGeometryLayer extends GeometryLayer {
         //console.log("GaiaGeometryLayer");
     }
 
-    /**
-     * Calcola la dimensione dei punti per un dato zoom level.
-     * Zoom basso → punti grandi. Zoom alto (dettaglio) → punti piccoli.
-     *
-     * @param {number} zoom
-     * @returns {number}
-     */
-    pointSizeForZoom(zoom) {
-        const zoomDiff = this.maxZoomRef - zoom;
-        return this.pointSize * (1 + zoomDiff * this.pointSizeScaleFactor);
-    }
+    createMaterialForGeometry(geometry) {
+        let spacing = this.pointSize || 3.0; // fallback
 
-    /**
-     * Restituisce (o crea) il materiale condiviso per un dato zoom level.
-     *
-     * @param {number} zoom
-     * @returns {THREE.PointsMaterial}
-     */
-    getMaterialForZoom(zoom) {
-        if (!this._materialsByZoom.has(zoom)) {
-            const mat = new THREE.PointsMaterial({
-                size: this.pointSizeForZoom(zoom),
-                sizeAttenuation: false,
-                vertexColors: true,
-                opacity: this.opacity,
-                transparent: this.opacity < 1,
-            });
-            this._materialsByZoom.set(zoom, mat);
+        const count = (geometry.attributes && geometry.attributes.position && geometry.attributes.position.count) || geometry.numFeature;
+        
+        if (count > 0 && geometry.inExtent) {
+            const ext = geometry.inExtent;
+            if (ext.west !== undefined && ext.east !== undefined && ext.north !== undefined && ext.south !== undefined) {
+                let w = Math.abs(ext.east - ext.west);
+                let h = Math.abs(ext.north - ext.south);
+                
+                // Conversione grossolana in metri se siamo in gradi
+                if (ext.crs === 'EPSG:4326') {
+                    const avgLat = (ext.north + ext.south) / 2;
+                    w *= 111320 * Math.cos(avgLat * Math.PI / 180);
+                    h *= 111320;
+                }
+                
+                if (w > 0 && h > 0) {
+                    const area = w * h;
+                    spacing = Math.sqrt(area / count);
+                }
+            }
         }
-        return this._materialsByZoom.get(zoom);
+
+        // Limiti di sicurezza in metri
+        if (isNaN(spacing) || !isFinite(spacing) || spacing <= 0) {
+            spacing = this.pointSize || 3.0;
+        }
+        spacing = Math.max(0.01, Math.min(spacing, 50.0));
+
+        // Fattore di overlap per far sfiorare/sovrapporre i punti e tappare i buchi
+        const overlapFactor = this.overlapFactor || 1.3; 
+        
+        const config = {
+            size: spacing * overlapFactor,
+            sizeAttenuation: true, // Fondamentale: i punti ora sono in metri! Più ti avvicini più si ingrandiscono
+            vertexColors: true,
+            opacity: this.opacity,
+        };
+
+        if (this.useSplatting) {
+            config.map = _circleTexture;
+            config.transparent = this.opacity < 1;
+            config.alphaTest = 0.5; // Taglio netto per mantenere le performance e la profondità
+            config.depthWrite = true; // Cruciale per mantenere il sorting 3D
+        } else {
+            config.transparent = this.opacity < 1;
+        }
+
+        return new THREE.PointsMaterial(config);
     }
 
     createPointsElement(geometry){
@@ -150,7 +200,9 @@ class GaiaGeometryLayer extends GeometryLayer {
             }
         }
 
-        const points = new THREE.Points(geometry, this.getMaterialForZoom(geometry.inExtent.zoom));
+        // Ogni tile ora ha il suo materiale dinamico basato sulla densità fisica dei punti
+        const mat = this.createMaterialForGeometry(geometry);
+        const points = new THREE.Points(geometry, mat);
         points.zoom = geometry.inExtent.zoom;
         points.lastTimeVisible = 0;
 
@@ -163,7 +215,6 @@ class GaiaGeometryLayer extends GeometryLayer {
 
         points.position.copy(pointFinal);
 
-
         var scaleVector = new THREE.Vector3(1, 1, 1);
         points.scale.copy(scaleVector);
         points.updateMatrixWorld();
@@ -173,13 +224,11 @@ class GaiaGeometryLayer extends GeometryLayer {
         points.matrixAutoUpdate = false;
 
         points.updateMatrix();
-        // points.tightbbox = geometry.boundingBox.applyMatrix4(points.matrix);
         points.layers.set(this.threejsLayer);
         points.layer = this;
         return points;
-        //this.object3d.add(points);
-        //this.object3d.updateMatrixWorld();
     }
+    
     // Verifico se considerata la camera, la tile3D è visibile
     tilesCulling(camera, box3D, tileMatrixWorld) {
         if (box3D && camera.isBox3Visible(box3D, tileMatrixWorld)) {
@@ -187,10 +236,12 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
         return false;
     }
+    
     calcKeyExtent(inExtent){
         var key = inExtent.zoom + '_' + inExtent.row + '_' + inExtent.col;
         return key;
     }
+    
     // In base allo Zoom c'è una distanza minima che rende il layer visibile
     checkTileVisibilitySq(zoom,distanceSq){
         if (zoom == 21 ){
@@ -208,12 +259,24 @@ class GaiaGeometryLayer extends GeometryLayer {
     }
 
     updateMaterial(){
-        // Aggiorna tutti i materiali in cache (uno per zoom level)
-        for (const [zoom, mat] of this._materialsByZoom.entries()) {
-            mat.size = this.pointSizeForZoom(zoom);
-            mat.opacity = this.opacity;
-            mat.transparent = this.opacity < 1;
-            mat.needsUpdate = true;
+        // Aggiorna i materiali attivi direttamente sulle mesh (ora sono specifici per tile)
+        for (const tilePoint of this.object3d.children) {
+            const mat = tilePoint.material;
+            if (mat) {
+                mat.opacity = this.opacity;
+                if (this.useSplatting) {
+                    mat.map = _circleTexture;
+                    mat.transparent = this.opacity < 1;
+                    mat.alphaTest = 0.5;
+                    mat.depthWrite = true;
+                } else {
+                    mat.map = null;
+                    mat.transparent = this.opacity < 1;
+                    mat.alphaTest = 0;
+                    mat.depthWrite = true;
+                }
+                mat.needsUpdate = true;
+            }
         }
     }
     updatePosition(){
@@ -276,7 +339,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
         that.stats.tilesLoading++;
         promise.then(
-            function(v) {
+            function onTileLoadSuccess(v) {
                 that._pendingTiles.delete(key);
                 that.stats.tilesLoading--;
 
@@ -309,7 +372,7 @@ class GaiaGeometryLayer extends GeometryLayer {
                 // Libera uno slot e avanza la coda
                 that.flushTileQueue(context);
             },
-            function(e) {
+            function onTileLoadError(e) {
                 that._pendingTiles.delete(key);
                 that.stats.tilesLoading--;
                 that.flushTileQueue(context);
