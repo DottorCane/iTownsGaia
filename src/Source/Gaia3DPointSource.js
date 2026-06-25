@@ -24,7 +24,9 @@ class Gaia3DPointSource extends TMSSource {
        this.isTMSSource = source.isTMSSource;
        this.url = source.url;
        this.offset = source.offset;
-       this.extent = globalExtentTMS.get(source.crs);
+       // Usiamo this.extent (che il costruttore super ha già convertito in un oggetto Extent nativo con i metodi come intersectsExtent).
+       // Se l'utente non ha fornito alcun extent, usiamo il fallback al mondo intero.
+       this.extent = this.extent || globalExtentTMS.get(source.crs);
        this.fetcher = Fetcher.arrayBuffer;
        this.parse = Gaia3DParserBinary.parse;
        //console.log("Start: Gaia3DPointSource " + source.url);

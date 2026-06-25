@@ -475,7 +475,12 @@ class GaiaGeometryLayer extends GeometryLayer {
         // Non dipende dai parent caricati: calcola direttamente dalla posizione
         // della camera quali tile zoom-21 intersecano il frustum.
 
-        const ZOOM_DETAIL = 21;
+        // Utilizza il livello di zoom massimo configurato dal layer o dalla sorgente,
+        // evitando il valore hardcoded 21 che creava troppe richieste se i dati si fermavano prima.
+        const ZOOM_DETAIL = Math.min(
+            this.source?.zoom?.max ?? (this.zoom?.max ?? 21), 
+            22
+        );
         const camPos = camera.camera3D.position;
         const matrixWorld = this.object3d.matrixWorld;
 
@@ -541,7 +546,13 @@ class GaiaGeometryLayer extends GeometryLayer {
                 _tempBox3.getCenter(_tempBoxCenter);
                 const distSq = camPos.distanceToSquared(_tempBoxCenter);
 
-                const ext = new Extent('EPSG:3857', ZOOM_DETAIL, row, col);
+                // In iTowns il costruttore Extent prende (crs, west, east, south, north).
+                // Per un extent TMS, dobbiamo creare un extent fittizio e poi assegnare zoom, row e col
+                const ext = new Extent('EPSG:3857', 0, 0, 0, 0);
+                ext.zoom = ZOOM_DETAIL;
+                ext.row = row;
+                ext.col = col;
+                
                 const key = this.calcKeyExtent(ext);
                 visibleTilesKeys.add(key);
                 this.requestLoadTile(ext, dictAllTile, distSq);

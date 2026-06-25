@@ -42,17 +42,24 @@ export default {
             return;
         }
 
-        const extentsDestination = node.getExtentsByProjection(layer.source.crs) || [node.extent];
+        let extentsDestination = node.getExtentsByProjection(layer.source.crs) || [node.extent];
+        
+        // Filtriamo gli extent che non possiedono le coordinate TMS (zoom, row, col).
+        // Questo previene le fastidiose richieste del tipo ".../undefined/undefined/undefined.BIN"
+        extentsDestination = extentsDestination.filter(ext => 
+            ext.zoom !== undefined && ext.row !== undefined && ext.col !== undefined
+        );
+
+        if (extentsDestination.length === 0) {
+            node.layerUpdateState[layer.id].noMoreUpdatePossible();
+            return;
+        }
 
         const zoomDest = extentsDestination[0].zoom;
+        const minZoom = Math.max(layer.zoom?.min || 0, layer.source?.zoom?.min || 0);
+        const maxZoom = Math.min(layer.zoom?.max || 22, layer.source?.zoom?.max || 22);
 
-        // check if it's tile level is equal to display level layer.
-        var res1 = !this.source.extentInsideLimit(node.extent, zoomDest);
-        var res2 = !node.extent.isPointInside(layer.source.extent.center(coord));
-        var res3 = zoomDest != layer.zoom.min;
-        // console.log(`Update CHECK extent ${layer.id} ${res1} ${layer.source.isFileSource} ${res2}  ${res3} : Update CHECK extent ${zoomDest} layer.zoom.min ${layer.zoom.min} `);
-
-        if (zoomDest > layer.zoom.max || zoomDest < layer.zoom.min) {
+        if (zoomDest > maxZoom || zoomDest < minZoom) {
             // console.log(`NO noMoreUpdatePossible Zoom error, ${layer.id}`);
             node.layerUpdateState[layer.id].noMoreUpdatePossible();
             return;
