@@ -126,6 +126,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         if (!this._materialsByZoom.has(zoom)) {
             const mat = new THREE.PointsMaterial({
                 size: this.pointSizeForZoom(zoom),
+                sizeAttenuation: false,
                 vertexColors: true,
                 opacity: this.opacity,
                 transparent: this.opacity < 1,

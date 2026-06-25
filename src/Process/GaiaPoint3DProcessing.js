@@ -137,11 +137,16 @@ export default {
                         }
                     }
 
-                    // Riutilizzo il materiale condiviso o ne creo uno se non disponibile (fallback)
-                    var material = layer._sharedPointsMaterial;
-                    if (!material) {
+                    // Utilizzo il materiale dinamico in base allo zoom se il layer lo supporta
+                    var material;
+                    if (layer.getMaterialForZoom) {
+                        material = layer.getMaterialForZoom(geometry.inExtent.zoom);
+                    } else if (layer._sharedPointsMaterial) {
+                        material = layer._sharedPointsMaterial;
+                    } else {
                         const config = {};
                         config.size = layer.pointSize;
+                        config.sizeAttenuation = false;
                         config.vertexColors = true;
                         material = new THREE.PointsMaterial(config);
                         if (layer.opacity < 1){
