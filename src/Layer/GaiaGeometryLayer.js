@@ -350,46 +350,27 @@ class GaiaGeometryLayer extends GeometryLayer {
                 that._pendingTiles.delete(key);
                 that.stats.tilesLoading--;
 
-                // Scarta se non più visibile
-                if (v && v.boundingBox && context && context.camera) {
-                    // Clona e ingrandisce il bounding box per evitare che edifici molto alti 
-                    // escano dal frustum (schermo) causando la cancellazione dell'intera tile
-                    // quando in realtà la loro cima è ancora visibile (specialmente con viste a 45 gradi)
-                    const expandedBox = v.boundingBox.clone();
-                    expandedBox.expandByScalar(2000); // Espande di 2km in tutte le direzioni
-
-                    _tempBoxCenter.set(
-                        (expandedBox.max.x+expandedBox.min.x)/2,
-                        (expandedBox.max.y+expandedBox.min.y)/2,
-                        (expandedBox.max.z+expandedBox.min.z)/2
-                    );
-                    var distSq = context.camera.camera3D.position.distanceToSquared(_tempBoxCenter);
-                    
-                    // Controlla la visibilità usando il box espanso
-                    var visible = context.camera.isBox3Visible(expandedBox, that.object3d.matrixWorld);
-                    
-                    if (distSq < 10000) { visible = true; }
-                    if (visible) { visible = that.checkTileVisibilitySq(v.inExtent.zoom, distSq); }
-
-                    if (!visible) {
-                        v.dispose();
-                        that.stats.tilesDiscarded++;
-                        // Libera uno slot e avanza la coda
-                        that.flushTileQueue(context);
-                        return;
-                    }
-                }
+                // Il blocco di visibilità qui è stato rimosso. 
+                // Le tile in download erano scartate per un errore di calcolo del bounding box (che era locale e non traslato).
+                // Se la tile non è più visibile al momento in cui finisce il download, iTowns la nasconderà automaticamente nel rendering.
 
                 var points = that.createPointsElement(v);
                 if (points != null) {
                     that.object3d.add(points);
                     that.object3d.updateMatrixWorld();
+                } else {
+                    // La tile è stata scaricata ma è vuota. Contrassegniamola 
+                    // come fallita/vuota nei pending per evitare retry infiniti.
+                    that._pendingTiles.set(key, "empty");
                 }
                 // Libera uno slot e avanza la coda
                 that.flushTileQueue(context);
             },
             function onTileLoadError(e) {
-                that._pendingTiles.delete(key);
+                // Invece di cancellarla dai pending, la marchiamo come fallita.
+                // Così dictAllTile || _pendingTiles.has(key) tornerà TRUE
+                // e preUpdate non tenterà di riscaricarla 60 volte al secondo!
+                that._pendingTiles.set(key, "error");
                 that.stats.tilesLoading--;
                 that.flushTileQueue(context);
             }
@@ -408,7 +389,7 @@ class GaiaGeometryLayer extends GeometryLayer {
     clearAndReload() {
         // 1. Abort tutti i download in corso
         for (const [key, controller] of this._pendingTiles.entries()) {
-            if (controller) { controller.abort(); }
+            if (controller && typeof controller.abort === 'function') { controller.abort(); }
         }
         this._pendingTiles.clear();
 
@@ -448,14 +429,18 @@ class GaiaGeometryLayer extends GeometryLayer {
                 (boxBoundingBox.max.y + boxBoundingBox.min.y) / 2,
                 (boxBoundingBox.max.z + boxBoundingBox.min.z) / 2
             );
-            const distanceSqCalc = camera.camera3D.position.distanceToSquared(_tempBoxCenter);
-
+            // Ripristino l'uso della matrice del layer poiché il bounding box originale è già in coordinate globali!
             let visible = context.camera.isBox3Visible(boxBoundingBox, this.object3d.matrixWorld);
+
+            const distanceSqCalc = camera.camera3D.position.distanceToSquared(_tempBoxCenter);
 
             // Soglia di prossimità: tile entro 100m sempre visibili (workaround per falsi negativi)
             if (distanceSqCalc < 10000) { visible = true; }
 
             if (visible) { visible = this.checkTileVisibilitySq(tilePoint.zoom, distanceSqCalc); }
+
+            // LOG ORDINATO DALL'UTENTE
+            console.log(`[Gaia] Tile ${tilePoint.geometry.inExtent.key} - DistanceSq: ${distanceSqCalc.toFixed(0)} - isBox3Visible: ${visible}`);
 
             if (visible) {
                 tilePoint.visible = true;
@@ -561,13 +546,18 @@ class GaiaGeometryLayer extends GeometryLayer {
         // ──────────────────────────────────────────────────────────────────────────
 
 
-        var timeToDelete = 5000;
+        // Il valore originale 5000 (5 secondi) era letale: le tile sui bordi esatti
+        // dello schermo (dove il box teorico è visibile ma quello reale no) venivano 
+        // ciclicamente cancellate ogni 5 secondi e poi riscaricate!
+        var timeToDelete = 600000; // 10 minuti di cache per le tile fuori schermo
         var timeNow = Date.now();
 
         // Verifico se ci sono degli elementi da cancellare dalla memoria in modo safe
         for (let i = this.object3d.children.length - 1; i >= 0; i--) {
             const item = this.object3d.children[i];
             if ((item.visible == false) && (item.lastTimeVisible > 0) && (timeNow - item.lastTimeVisible > timeToDelete)) {
+                // LOG ORDINATO DALL'UTENTE
+                console.warn(`[Gaia] GARBAGE COLLECTOR: Rimuovo la tile ${item.geometry.inExtent.key} perché invisibile da ${timeNow - item.lastTimeVisible}ms`);
                 if (item.geometry) {
                     item.geometry.dispose();
                 }
@@ -579,7 +569,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         // Abort pending tiles che non servono più
         for (const [key, controller] of this._pendingTiles.entries()) {
             if (!visibleTilesKeys.has(key)) {
-                if (controller) { controller.abort(); }
+                if (controller && typeof controller.abort === 'function') { controller.abort(); }
                 this._pendingTiles.delete(key);
                 this.stats.tilesDiscarded++;
             }

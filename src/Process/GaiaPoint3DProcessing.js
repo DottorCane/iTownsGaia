@@ -114,27 +114,8 @@ export default {
 
             featureMeshes.forEach((geometry) => {
                 if (geometry) {
-                    // Controllo se la tile è ancora visibile prima di processarla
-                    if (geometry.boundingBox && context && context.camera) {
-                        const expandedBox = geometry.boundingBox.clone();
-                        expandedBox.expandByScalar(2000); // Espande per non cappare edifici alti a 45 gradi
-                        
-                        _tileCenter.set(
-                            (expandedBox.max.x + expandedBox.min.x) / 2,
-                            (expandedBox.max.y + expandedBox.min.y) / 2,
-                            (expandedBox.max.z + expandedBox.min.z) / 2
-                        );
-                        var distSq = context.camera.camera3D.position.distanceToSquared(_tileCenter);
-                        var visible = context.camera.isBox3Visible(expandedBox, layer.object3d.matrixWorld);
-                        if (distSq < 10000) { visible = true; }
-                        if (visible && layer.checkTileVisibilitySq) { visible = layer.checkTileVisibilitySq(geometry.inExtent.zoom, distSq); }
-                        
-                        if (!visible) {
-                            geometry.dispose();
-                            layer.stats.tilesDiscarded++;
-                            return;
-                        }
-                    }
+                    // Il blocco di controllo visibilità locale è stato rimosso per evitare falsi scarti 
+                    // e la distruzione di tile appena scaricate. La visibilità finale è gestita dal renderer.
 
                     var key = geometry.inExtent.zoom + '_' + geometry.inExtent.row + '_' + geometry.inExtent.col;
                     geometry.inExtent.key = key;
@@ -212,10 +193,13 @@ export default {
                     node.layerUpdateState[layer.id].failure(1, true);
                 }
             });
-        },
-        (err) => {
+        }).catch((err) => {
             layer.stats.tilesLoading--;
-            handlingError(err, node, layer, node.level, context.view);
+            // iTowns per impostazione predefinita tenta di riscaricare i file falliti (es. 404)
+            // per ben 4 volte aumentando i secondi di attesa (backoff esponenziale).
+            // Questo causava il lento "sgocciolamento" di 1 richiesta alla volta a vuoto.
+            // Sostituiamo handlingError con un fallimento definitivo immediato.
+            node.layerUpdateState[layer.id].failure(Date.now(), true);
         });
     },
 };
