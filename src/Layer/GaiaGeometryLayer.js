@@ -22,7 +22,7 @@ const _tempTile = new Tile('EPSG:3857', 21, 0, 0);
 const HALF_WORLD_3857 = 20037508.342789244;
 const MAX_TILE_CANDIDATES = 400; // Limite di sicurezza
 
-const _circleTexture = (function() {
+const _circleTexture = (function () {
     if (typeof document === 'undefined') {
         return null;
     }
@@ -30,13 +30,13 @@ const _circleTexture = (function() {
     canvas.width = 64;
     canvas.height = 64;
     const context = canvas.getContext('2d');
-    
+
     // Disegniamo un cerchio solido netto invece di un gradiente sfumato
     context.beginPath();
     context.arc(32, 32, 30, 0, 2 * Math.PI, false);
     context.fillStyle = 'white';
     context.fill();
-    
+
     const texture = new THREE.CanvasTexture(canvas);
     return texture;
 }());
@@ -51,23 +51,23 @@ class GaiaGeometryLayer extends GeometryLayer {
 
     constructor(id, config = {}) {
         config.update = GaiaPoint3DProcessing.update;
-        config.cacheLifeTime= 1000;
+        config.cacheLifeTime = 1000;
         super(id, config.object3d || new Group(), config);
         // this.cache.listTile = options.cacheLifeTime;
         this.isGaiaGeometryLayer = true;
         this.accurate = true;
         //this.buildExtent = !this.accurate;
         this.bboxes = {};
-        this.bboxes.visible=true;
+        this.bboxes.visible = true;
 
-        if (config.offset){
-            if (config.offset.x===undefined){
+        if (config.offset) {
+            if (config.offset.x === undefined) {
                 config.offset.x = 0;
             }
-            if (config.offset.y===undefined){
+            if (config.offset.y === undefined) {
                 config.offset.y = 0;
             }
-            if (config.offset.z===undefined){
+            if (config.offset.z === undefined) {
                 config.offset.z = 0;
             }
             this.offset = new THREE.Vector3(config.offset.x, config.offset.y, config.offset.z);
@@ -93,7 +93,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
         this.material.defines = this.material.defines || {};
         this.mode = config.mode || PNTS_MODE.COLOR;
-        
+
         this.stats = {
             pointsMemory: 0,
             pointsShow: 0,
@@ -137,20 +137,20 @@ class GaiaGeometryLayer extends GeometryLayer {
         let spacing = this.pointSize || 3.0; // fallback
 
         const count = (geometry.attributes && geometry.attributes.position && geometry.attributes.position.count) || geometry.numFeature;
-        
+
         if (count > 0 && geometry.inExtent) {
             const ext = geometry.inExtent;
             if (ext.west !== undefined && ext.east !== undefined && ext.north !== undefined && ext.south !== undefined) {
                 let w = Math.abs(ext.east - ext.west);
                 let h = Math.abs(ext.north - ext.south);
-                
+
                 // Conversione grossolana in metri se siamo in gradi
                 if (ext.crs === 'EPSG:4326') {
                     const avgLat = (ext.north + ext.south) / 2;
                     w *= 111320 * Math.cos(avgLat * Math.PI / 180);
                     h *= 111320;
                 }
-                
+
                 if (w > 0 && h > 0) {
                     const area = w * h;
                     spacing = Math.sqrt(area / count);
@@ -165,8 +165,8 @@ class GaiaGeometryLayer extends GeometryLayer {
         spacing = Math.max(0.01, Math.min(spacing, 50.0));
 
         // Fattore di overlap per far sfiorare/sovrapporre i punti e tappare i buchi
-        const overlapFactor = this.overlapFactor || 1.3; 
-        
+        const overlapFactor = this.overlapFactor || 1.3;
+
         const config = {
             size: spacing * overlapFactor,
             sizeAttenuation: true, // Fondamentale: i punti ora sono in metri! Più ti avvicini più si ingrandiscono
@@ -184,7 +184,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
 
         const mat = new THREE.PointsMaterial(config);
-        
+
         // PATCH SHADER: Impedisce ai punti di rimpicciolirsi troppo in prospettiva
         // Questo garantisce che da chilometri di distanza restino visibili come polvere
         // invece di scomparire a zero pixel a causa di sizeAttenuation.
@@ -201,8 +201,8 @@ class GaiaGeometryLayer extends GeometryLayer {
         return mat;
     }
 
-    createPointsElement(geometry){
-        if (!geometry){
+    createPointsElement(geometry) {
+        if (!geometry) {
             return;
         }
 
@@ -210,7 +210,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         geometry.inExtent.key = key;
 
         for (const tilePoint of this.object3d.children) {
-            if (tilePoint.geometry.inExtent.key === key ) {
+            if (tilePoint.geometry.inExtent.key === key) {
                 return;
             }
         }
@@ -222,9 +222,9 @@ class GaiaGeometryLayer extends GeometryLayer {
         points.lastTimeVisible = 0;
 
         var pointFinal;
-        if (this.offset){
+        if (this.offset) {
             pointFinal = points.geometry.boundingBox.min.clone().add(this.offset);
-        }else{
+        } else {
             pointFinal = points.geometry.boundingBox.min.clone()
         }
 
@@ -243,7 +243,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         points.layer = this;
         return points;
     }
-    
+
     // Verifico se considerata la camera, la tile3D è visibile
     tilesCulling(camera, box3D, tileMatrixWorld) {
         if (box3D && camera.isBox3Visible(box3D, tileMatrixWorld)) {
@@ -251,12 +251,12 @@ class GaiaGeometryLayer extends GeometryLayer {
         }
         return false;
     }
-    
-    calcKeyExtent(inExtent){
+
+    calcKeyExtent(inExtent) {
         var key = inExtent.zoom + '_' + inExtent.row + '_' + inExtent.col;
         return key;
     }
-    
+
     // In base allo Zoom c'è una distanza minima che rende il layer visibile
     checkTileVisibilitySq(zoom, distanceSq) {
         // Disabilitato: con il nuovo sistema di LOD basato su densità, i punti
@@ -265,7 +265,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         return true;
     }
 
-    updateMaterial(){
+    updateMaterial() {
         // Aggiorna i materiali attivi direttamente sulle mesh (ora sono specifici per tile)
         for (const tilePoint of this.object3d.children) {
             const mat = tilePoint.material;
@@ -286,7 +286,7 @@ class GaiaGeometryLayer extends GeometryLayer {
             }
         }
     }
-    updatePosition(){
+    updatePosition() {
         for (const tilePoint of this.object3d.children) {
             var pointFinal = tilePoint.geometry.boundingBox.min.clone().sub(this.offsetInitial);
             var pointFinal = pointFinal.add(this.offset);
@@ -440,7 +440,7 @@ class GaiaGeometryLayer extends GeometryLayer {
             if (visible) { visible = this.checkTileVisibilitySq(tilePoint.zoom, distanceSqCalc); }
 
             // LOG ORDINATO DALL'UTENTE
-            console.log(`[Gaia] Tile ${tilePoint.geometry.inExtent.key} - DistanceSq: ${distanceSqCalc.toFixed(0)} - isBox3Visible: ${visible}`);
+            //console.log(`[Gaia] Tile ${tilePoint.geometry.inExtent.key} - DistanceSq: ${distanceSqCalc.toFixed(0)} - isBox3Visible: ${visible}`);
 
             if (visible) {
                 tilePoint.visible = true;
@@ -463,7 +463,7 @@ class GaiaGeometryLayer extends GeometryLayer {
         // Utilizza il livello di zoom massimo configurato dal layer o dalla sorgente,
         // evitando il valore hardcoded 21 che creava troppe richieste se i dati si fermavano prima.
         const ZOOM_DETAIL = Math.min(
-            this.source?.zoom?.max ?? (this.zoom?.max ?? 21), 
+            this.source?.zoom?.max ?? (this.zoom?.max ?? 21),
             22
         );
         const camPos = camera.camera3D.position;
@@ -537,7 +537,7 @@ class GaiaGeometryLayer extends GeometryLayer {
                 ext.zoom = ZOOM_DETAIL;
                 ext.row = row;
                 ext.col = col;
-                
+
                 const key = this.calcKeyExtent(ext);
                 visibleTilesKeys.add(key);
                 this.requestLoadTile(ext, dictAllTile, distSq);
@@ -557,7 +557,7 @@ class GaiaGeometryLayer extends GeometryLayer {
             const item = this.object3d.children[i];
             if ((item.visible == false) && (item.lastTimeVisible > 0) && (timeNow - item.lastTimeVisible > timeToDelete)) {
                 // LOG ORDINATO DALL'UTENTE
-                console.warn(`[Gaia] GARBAGE COLLECTOR: Rimuovo la tile ${item.geometry.inExtent.key} perché invisibile da ${timeNow - item.lastTimeVisible}ms`);
+                //console.warn(`[Gaia] GARBAGE COLLECTOR: Rimuovo la tile ${item.geometry.inExtent.key} perché invisibile da ${timeNow - item.lastTimeVisible}ms`);
                 if (item.geometry) {
                     item.geometry.dispose();
                 }

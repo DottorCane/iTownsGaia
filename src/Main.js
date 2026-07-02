@@ -98,6 +98,7 @@ export { default as CopcSource } from 'Source/CopcSource';
 export { default as GaiaGeometryLayer } from 'Layer/GaiaGeometryLayer';
 export { default as Gaia3DPointSource } from 'Source/Gaia3DPointSource';
 export { default as Gaia3DPointSource2 } from 'Source/Gaia3DPointSource2';
+export { default as GaiaFeature2Mesh } from 'Converter/GaiaFeature2Mesh';
 //Widget
 export { default as Navigation } from 'Utils/gui/Navigation';
 export { default as Minimap } from 'Utils/gui//Minimap';

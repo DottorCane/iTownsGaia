@@ -55,13 +55,14 @@ class FeatureGeometryLayer extends GeometryLayer {
             onMeshCreated,
             accurate = true,
             filter,
+            convert,
             ...geometryOptions
         } = options;
 
         super(id, object3d || new Group(), geometryOptions);
 
         this.update = FeatureProcessing.update;
-        this.convert = Feature2Mesh.convert({
+        this.convert = convert || Feature2Mesh.convert({
             batchId,
         });
 
