@@ -73,6 +73,17 @@ function vtFeatureToFeatureGeometry(vtFeature, feature, classify = false) {
                 count = 0;
                 sum = 0;
             }
+            // --- GAIA OPTIMIZATION (Punto 2: Semplificazione Geometrie) ---
+            // Scarta i vertici che sono troppo vicini a quello precedente (distanza euclidea < 4 unità di griglia)
+            // tranne se è il primo punto del sub-poligono. Questo riduce notevolmente il numero di triangoli.
+            if (count > 0 && isPolygon) {
+                const dx = x - lastPoint.x;
+                const dy = y - lastPoint.y;
+                if ((dx * dx + dy * dy) < 16) {
+                    continue;
+                }
+            }
+
             count++;
             const coordProj = project(
                 x,
